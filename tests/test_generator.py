@@ -209,6 +209,28 @@ def test_linddun_column_and_per_diagram_method():
         assert word in ins, word
 
 
+def test_threatdragon_export_matches_model():
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "td.json"
+        g.threatdragon(MODEL, str(p))
+        td = json.loads(p.read_text(encoding="utf-8"))
+    assert td["version"].startswith("2.") and td["summary"]["title"] == MODEL["title"]
+    diags = td["detail"]["diagrams"]
+    assert len(diags) == len(MODEL["diagrams"])
+    exported = {}
+    for dg in diags:
+        ids = {c["id"] for c in dg["cells"]}
+        for c in dg["cells"]:
+            assert c["shape"] in {"actor", "process", "store", "flow", "trust-boundary-box", "td-text-block"}
+            if c["shape"] == "flow":
+                assert c["source"]["cell"] in ids and c["target"]["cell"] in ids
+            for t in c.get("data", {}).get("threats", []):
+                for k in ("title", "type", "severity", "status", "description", "mitigation"):
+                    assert t[k], k
+                exported[t["title"].split(":")[0]] = (dg["title"].split(":")[0], c["data"]["name"].split(":")[0])
+    assert {t["id"]: (t["diagram"], t["target"]) for t in MODEL["threats"]} == exported
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

@@ -27,6 +27,7 @@ assert not warns, warns
 ix = g.index(model)
 g.drawio(model, str(EX / "example_threat_model.drawio"), ix)
 g.register(model, str(EX / "example_threat_model_register.xlsx"), ix)
+g.threatdragon(model, str(EX / "example_threatdragon.json"), ix)
 order = sorted(model["diagrams"], key=lambda d: (d.get("level", 0), d["id"]))
 mers = {d["id"]: g.mermaid(model, d["id"], ix) for d in order}
 (EX / "example_dfd.mmd").write_text("\n\n".join(f"%% {k}\n{v}" for k, v in mers.items()) + "\n", encoding="utf-8")
@@ -44,6 +45,7 @@ tm_generator.py turns one JSON threat model (all levels) into outputs that alway
 - <system>.drawio - one page per diagram (L0, L1-P#, L2-P#.#). Decomposed processes are double ellipses marked ⊞ and link to their child page; context elements are grey and link back to the page that defines them; every page has a Back link. Hover any element, flow or threat badge for its document references and threats.
 - <system>_register.xlsx - one workbook for all levels: Read me, Threats (Problem, Solution and Document reference grouped together, with Refines / Refined by / Related / Arch. improvement / Open questions cross references as clickable links), Arch improvements, Open questions, Elements & flows, Diagrams, Documents.
 - <system>_model.json - the model, so the run can be repeated or updated later.
+- <system>_threatdragon.json - OWASP Threat Dragon v2 model: one Threat Dragon diagram per level, trust boundary boxes, actors/processes/stores/flows, and every threat on its element or flow with severity, STRIDE type, mitigation, score, and the T# ID, references and cross references in its title and description. Context elements are marked out of scope. Open it in Threat Dragon (web or desktop) with Open an existing threat model.
 - Mermaid text for each diagram, printed between "MERMAID_START <diagram>: <title>" and "MERMAID_END".
 
 It validates first and stops with MODEL INVALID on errors: duplicate IDs; broken references; child IDs not prefixed with the parent; a parent flow that is not in the parent diagram; threats whose target is not an own element or flow of their diagram; likelihood or impact outside 1-5; severity that does not match likelihood x impact; threats, improvements or questions without refs; refs to unknown documents; refines that does not point to a higher-level threat.
@@ -63,7 +65,7 @@ MODEL["diagrams"].append({{...L1-P3...}})
 ```
 
 3. run(MODEL, "<system_name>"). Fix every MODEL INVALID error and rerun. Fix each WARNING or explain it in the review.
-4. Provide the .drawio, .xlsx and _model.json files for download and paste each Mermaid block unchanged.
+4. Provide the .drawio, .xlsx, _model.json and _threatdragon.json files for download and paste each Mermaid block unchanged.
 
 # TM-03 JSON model schema
 

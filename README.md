@@ -10,6 +10,7 @@ Each run produces outputs that always agree with each other:
 | `<system>.drawio` | One editable page per diagram. Click a decomposed process (⊞) to open its child page, click a grey context element to go back up, and hover anything to see its document references and threats |
 | `<system>_register.xlsx` | One workbook for all levels: **Threats** (problem, solution and document reference side by side, STRIDE and LINDDUN columns, clickable cross references), **Arch improvements**, **Open questions**, **Elements & flows**, **Diagrams**, **Documents** |
 | `<system>_model.json` | The model itself, so you can rerun or update it later and keep the same IDs |
+| `<system>_threatdragon.json` | The same model for [OWASP Threat Dragon](https://owasp.org/www-project-threat-dragon/) (v2 format). You get one Threat Dragon diagram per level, with trust boundaries, elements, flows and every threat. Each threat keeps its severity, STRIDE type, mitigation and score, and its title and description carry the T# ID, references and cross references. Open it in Threat Dragon with *Open an existing threat model* |
 
 ## How it works
 
@@ -26,6 +27,7 @@ flowchart TD
   G --> I[".drawio (multi-page)"]
   G --> J[".xlsx (all levels)"]
   G --> K["model .json"]
+  G --> L["Threat Dragon .json"]
   G -. "MODEL INVALID / WARNING" .-> B
 ```
 
@@ -186,7 +188,7 @@ flowchart LR
   class E3 ctx
 ```
 
-The L1-P5 CI/CD pipeline and L2-P3.3 agent orchestrator diagrams are in [`examples/example_dfd.mmd`](examples/example_dfd.mmd) and in the draw.io file. Open [`examples/example_threat_model.drawio`](examples/example_threat_model.drawio) in draw.io and [`examples/example_threat_model_register.xlsx`](examples/example_threat_model_register.xlsx) in Excel to see the full outputs.
+The L1-P5 CI/CD pipeline and L2-P3.3 agent orchestrator diagrams are in [`examples/example_dfd.mmd`](examples/example_dfd.mmd) and in the draw.io file. Open [`examples/example_threat_model.drawio`](examples/example_threat_model.drawio) in draw.io, [`examples/example_threatdragon.json`](examples/example_threatdragon.json) in Threat Dragon, and [`examples/example_threat_model_register.xlsx`](examples/example_threat_model_register.xlsx) in Excel to see the full outputs.
 
 Extract from the Threats sheet. Problem, solution and reference sit together:
 
@@ -200,15 +202,15 @@ Extract from the Threats sheet. Problem, solution and reference sit together:
 
 | Path | What it is |
 |---|---|
-| `agent/agent_instructions.txt` | Paste into the agent's Instructions field (~6,250 characters; the limit is 8,000) |
+| `agent/agent_instructions.txt` | Paste into the agent's Instructions field (~6,300 characters; the limit is 8,000) |
 | `agent/tm_generator.txt` | Generator to attach in chat if the agent can't find it in its knowledge files |
 | `agent/tm_loader.py` | The STEP 0 loader (also embedded in the instructions): finds the generator attached or in TM-03 |
 | `knowledge/TM-0*.docx` | The four knowledge files to upload to the agent |
 | `knowledge/src/*.md` | Editable source for the knowledge files (TM-03 and TM-04 are generated) |
-| `generator/tm_generator.py` | Validator and renderer: JSON model → Mermaid + multi-page `.drawio` + multi-sheet `.xlsx` + `.json` |
+| `generator/tm_generator.py` | Validator and renderer: JSON model → Mermaid + multi-page `.drawio` + multi-sheet `.xlsx` + `.json` + Threat Dragon `.json`. Python standard library plus `openpyxl` only |
 | `examples/` | Example documents, model, Mermaid, draw.io and workbook |
 | `tools/build_knowledge.py` | Rebuilds TM-03, TM-04, the `.docx` files, the examples and `agent/tm_generator.txt` |
-| `tests/test_generator.py` | 20 tests: validation rules, drill-down links, threat visibility, workbook cross references, quotes, framework IDs, loader |
+| `tests/test_generator.py` | 21 tests: validation rules, drill-down links, threat visibility, workbook cross references, quotes, framework IDs, loader, Threat Dragon export |
 
 ### Knowledge files
 
@@ -256,7 +258,7 @@ Code interpreter needs a **Microsoft 365 Copilot licence**, or Copilot Chat **wi
 ```bash
 pip install openpyxl
 python generator/tm_generator.py model.json my_system
-# -> my_system.drawio, my_system_register.xlsx, my_system_model.json, Mermaid printed to stdout
+# -> my_system.drawio, my_system_register.xlsx, my_system_model.json, my_system_threatdragon.json, Mermaid printed to stdout
 ```
 
 ## Frameworks and versions (as of November 2026)
@@ -299,6 +301,14 @@ If you change the generator, the example model or the TM sources, run the build 
 - **Why break components down at all:** one large diagram hides the internal boundaries where most AI-agent and pipeline threats live, such as a parser sharing a container with an orchestrator or a write tool holding service credentials. The decomposition test only opens a component up where that adds insight.
 - **Threats on flows:** Mermaid can only attach a badge to a box, not an arrow, so threats on flows appear as `⚠T#` in the arrow label. In draw.io the arrow is also coloured by its worst threat.
 - **Untrusted input:** the documents are treated as data. Any text addressed to an AI is reported as a finding, not obeyed. The generator never writes Mermaid `click` directives or links.
+
+## Interoperability
+
+- **OWASP Threat Dragon:** the export passes Threat Dragon's own v2 schema check (the Ajv validation it runs on import).
+  - **Kept:** IDs are deterministic, so re-exporting an updated model gives the same element and threat IDs.
+  - **Lost on import:** Threat Dragon has no notion of levels, so the drill-down links between diagrams don't carry over. Diagram titles state what each one decomposes.
+  - **Threat type:** threats are recorded as the STRIDE type, and the LINDDUN code and other framework IDs go in the description.
+- **Threagile** was considered and not added. Its YAML needs data that design documents rarely state: confidentiality, integrity and availability ratings, data assets and their classification, and technology types for every asset. It also generates its own risks from rules rather than importing threats. Exporting would mean inventing values.
 
 ## Known limitations
 

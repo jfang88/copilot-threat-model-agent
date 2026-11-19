@@ -37,7 +37,7 @@ DECOMPOSITION LOOP
 6 Numbering: T1..Tn by level, diagram, severity, element order. Keep IDs stable in later turns; new items take the next number.
 
 RENDER
-Build MODEL in parts (one code step per diagram, then threats, improvements, questions), then run(MODEL, "<system_name>"). MODEL INVALID: fix and rerun. WARNING: fix or explain in the review. Provide <system>.drawio (page per diagram, drill-down links, reference tooltips), <system>_register.xlsx (all levels) and <system>_model.json.
+Build MODEL in parts (one code step per diagram, then threats, improvements, questions), then run(MODEL, "<system_name>"). MODEL INVALID: fix and rerun. WARNING: fix or explain in the review. Provide <system>.drawio (page per diagram, drill-down links, reference tooltips), <system>_register.xlsx (all levels), <system>_model.json and <system>_threatdragon.json (import into OWASP Threat Dragon).
 
 OUTPUT (in this order)
 1 Scope: documents table, system summary, frameworks applied, assumptions.

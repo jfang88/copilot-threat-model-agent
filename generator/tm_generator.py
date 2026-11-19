@@ -1,10 +1,11 @@
-# tm_generator.py  v2.1 - multi-level threat model renderer for the Copilot DFD agent
+# tm_generator.py  v2.2 - multi-level threat model renderer for the Copilot DFD agent
 # Copilot code interpreter: load this file with exec(open(path).read()), build MODEL (schema in TM-03), then run(MODEL, "<system>")
 # Command line: python tm_generator.py model.json [output_name]
 # Outputs: <name>.drawio (one page per diagram, clickable drill-down), <name>_register.xlsx (all levels, cross-referenced),
-#          <name>_model.json (re-runnable), Mermaid per diagram printed between MERMAID_START/MERMAID_END markers.
+#          <name>_model.json (re-runnable), <name>_threatdragon.json (OWASP Threat Dragon v2 import),
+#          Mermaid per diagram printed between MERMAID_START/MERMAID_END markers.
 # Do not modify this script.
-import json, re, sys
+import json, re, sys, uuid
 from xml.sax.saxutils import quoteattr
 
 SEV = {"Critical": ("#f8d7da", "#b02a37"), "High": ("#fff3cd", "#b8860b"),
@@ -446,6 +447,129 @@ def register(m, path, ix=None):
     return path
 
 
+# ---------------------------------------------------------------- OWASP Threat Dragon v2 export
+TD_STRIDE = {"S": "Spoofing", "T": "Tampering", "R": "Repudiation", "I": "Information disclosure",
+             "D": "Denial of service", "E": "Elevation of privilege"}
+TD_SHAPE = {"external": ("actor", "tm.Actor"), "process": ("process", "tm.Process"), "store": ("store", "tm.Store")}
+
+
+def _uid(*parts):
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "tm_generator/" + "/".join(parts)))
+
+
+def _ports(cid):
+    grp = {k: {"position": k, "attrs": {"circle": {"r": 4, "magnet": True, "stroke": "#5F95FF", "strokeWidth": 1,
+                                                   "fill": "#fff", "style": {"visibility": "hidden"}}}}
+           for k in ("top", "right", "bottom", "left")}
+    return {"groups": grp, "items": [{"group": k, "id": _uid(cid, "port", k)} for k in grp]}
+
+
+def _td_threat(t, ix):
+    extra = [f'Ref: {ref_text(t.get("refs"))}']
+    if quotes(t.get("refs")): extra.append("Evidence: " + quotes(t.get("refs")))
+    extra.append("Frameworks: " + t.get("frameworks", ""))
+    if t.get("refines"): extra.append("Refines: " + t["refines"])
+    if ix["refined_by"].get(t["id"]): extra.append("Refined by: " + ", ".join(ix["refined_by"][t["id"]]))
+    if t.get("related"): extra.append("Related: " + ", ".join(t["related"]))
+    if ix["asked_in"].get(t["id"]): extra.append("Questions: " + ", ".join(ix["asked_in"][t["id"]]))
+    recs = ix["addressed_by"].get(t["id"], [])
+    return {"id": _uid("threat", t["id"]), "threatId": _uid("threat", t["id"]), "number": tnum(t["id"]),
+            "title": f'{t["id"]}: {t["title"]}', "type": TD_STRIDE.get(t.get("stride", ""), "Tampering"),
+            "modelType": "STRIDE", "status": t.get("status", "Open"), "severity": t["severity"],
+            "score": str(t["likelihood"] * t["impact"]),
+            "description": t.get("description", "") + "\n\n" + "\n".join(extra),
+            "mitigation": t.get("control", "") + (("\n\nArchitecture improvement: " + ", ".join(recs)) if recs else "")}
+
+
+def _td_layout(g):
+    """Same column-per-boundary layout as the draw.io pages: returns boundary and element boxes (absolute)."""
+    boxes, x, y0 = {}, 20, 120
+    for b in g["boundaries"]:
+        els = [e for e in g["elements"] if e["boundary"] == b["id"]]
+        cols = [els[i:i + 4] for i in range(0, len(els), 4)] or [[]]
+        h = 60 + max(sum(SHAPE[e["type"]][2] + 75 for e in c) for c in cols)
+        bw = 40 + 215 * len(cols)
+        boxes[b["id"]] = (x, y0, bw, h)
+        for ci, col in enumerate(cols):
+            y = y0 + 50
+            for e in col:
+                w, hh = (110, 110) if e["type"] == "process" else SHAPE[e["type"]][1:]
+                boxes[e["id"]] = (x + 30 + 215 * ci, y, w, hh)
+                y += SHAPE[e["type"]][2] + 75
+        x += bw + 40
+    return boxes
+
+
+def threatdragon(m, path, ix=None):
+    ix = ix or index(m)
+    diagrams = []
+    for n, g in enumerate(sorted(m["diagrams"], key=lambda d: (d.get("level", 0), d["id"]))):
+        gid, cells, box = g["id"], [], _td_layout(g)
+        head = f'{gid}: {g["title"]}' + (f' (decomposes {g["parent"]})' if g.get("parent") else "")
+        note = head + "\n" + ref_text(g.get("refs")) + ("\n" + g["stop_reason"] if g.get("stop_reason") else "")
+        cells.append({"position": {"x": 20, "y": 10}, "size": {"width": 900, "height": 90}, "attrs": {"text": {"text": note}},
+                      "visible": True, "shape": "td-text-block", "zIndex": 1, "id": _uid(gid, "title"),
+                      "data": {"type": "tm.Text", "name": note, "hasOpenThreats": False}})
+        for b in g["boundaries"]:
+            x, y, w, h = box[b["id"]]
+            cells.append({"position": {"x": x, "y": y}, "size": {"width": w, "height": h},
+                          "attrs": {"label": {"text": f'{b["id"]}: {b["name"]}'}}, "visible": True,
+                          "shape": "trust-boundary-box", "zIndex": -1, "id": _uid(gid, b["id"]),
+                          "data": {"type": "tm.BoundaryBox", "name": f'{b["id"]}: {b["name"]}', "description": "",
+                                   "isTrustBoundary": True, "hasOpenThreats": False}})
+        for e in g["elements"]:
+            shape, typ = TD_SHAPE[e["type"]]
+            x, y, w, h = box[e["id"]]
+            ctx = bool(e.get("context"))
+            tt = [] if ctx else ix["by_target"].get((gid, e["id"]), [])
+            name = f'{e["id"]}: {e["name"]}' + (" (ASSUMED)" if e.get("assumed") else "") + \
+                (f' [see {ix["child"][e["id"]]}]' if e["id"] in ix["child"] and not ctx else "")
+            col = SEV[tt[0]["severity"]][1] if tt else ("#999999" if ctx else "#333333")
+            line = {"stroke": col, "strokeWidth": 2.5 if tt else 1, "strokeDasharray": "4 3" if ctx or e.get("assumed") else None}
+            attrs = {"text": {"text": name}}
+            if shape == "store": attrs.update(topLine=dict(line), bottomLine=dict(line))
+            else: attrs["body"] = line
+            data = {"name": name, "type": typ, "isTrustBoundary": False, "outOfScope": ctx,
+                    "reasonOutOfScope": f'Context from {ix["home"][e["id"]]}' if ctx else "",
+                    "description": ("Ref: " + ref_text(e.get("refs"))) if e.get("refs") else "",
+                    "hasOpenThreats": any(t.get("status", "Open") == "Open" for t in tt),
+                    "threats": [_td_threat(t, ix) for t in tt]}
+            if shape == "actor": data["providesAuthentication"] = False
+            if shape == "store": data.update(isALog=False, storesCredentials=False, isEncrypted=False, isSigned=False)
+            cid = _uid(gid, e["id"])
+            cells.append({"position": {"x": x, "y": y}, "size": {"width": w, "height": h}, "attrs": attrs, "visible": True,
+                          "shape": shape, "zIndex": 2, "ports": _ports(cid), "id": cid, "data": data})
+        for f in g["flows"]:
+            tt = ix["by_target"].get((gid, f["id"]), [])
+            label = f'{f["id"]}: {f["label"]}' + (" (ASSUMED)" if f.get("assumed") else "")
+            cells.append({"shape": "flow", "zIndex": 10, "id": _uid(gid, f["id"]), "connector": "smooth",
+                          "attrs": {"line": {"stroke": SEV[tt[0]["severity"]][1] if tt else "#333333",
+                                             "targetMarker": {"name": "block"},
+                                             "strokeDasharray": "4 3" if f.get("assumed") else None}},
+                          "labels": [{"attrs": {"labelText": {"text": label, "textAnchor": "middle", "textVerticalAnchor": "middle"},
+                                                "labelBody": {"ref": "labelText", "refRx": "50%", "refRy": "60%", "fill": "#fff", "strokeWidth": 0}},
+                                      "markup": [{"tagName": "ellipse", "selector": "labelBody"}, {"tagName": "text", "selector": "labelText"}],
+                                      "position": 0.5}],
+                          "source": {"cell": _uid(gid, f["from"])}, "target": {"cell": _uid(gid, f["to"])},
+                          "data": {"type": "tm.Flow", "name": label, "description": ("Ref: " + ref_text(f.get("refs")) +
+                                   (f' | refines {f["parent"]}' if f.get("parent") else "")) if f.get("refs") else "",
+                                   "outOfScope": False, "reasonOutOfScope": "", "isBidirectional": False, "isEncrypted": False,
+                                   "isPublicNetwork": False, "protocol": "", "isTrustBoundary": False,
+                                   "hasOpenThreats": any(t.get("status", "Open") == "Open" for t in tt),
+                                   "threats": [_td_threat(t, ix) for t in tt]}})
+        diagrams.append({"id": n, "version": "2.3.0", "title": head[:80], "diagramType": "STRIDE",
+                         "description": ref_text(g.get("refs")), "thumbnail": "./public/content/images/thumbnail.stride.jpg",
+                         "cells": cells})
+    docs = "; ".join(f'{d["id"]} = {d.get("name", "")} v{d.get("version", "")}' for d in m["documents"])
+    out = {"version": "2.3.0",
+           "summary": {"title": m["title"], "owner": m.get("owner", ""), "id": 0,
+                       "description": "Generated by tm_generator.py. Threat IDs (T#), references and cross references are in each "
+                                      "threat's title and description. Documents: " + docs},
+           "detail": {"contributors": [], "diagrams": diagrams, "diagramTop": len(diagrams),
+                      "reviewer": "", "threatTop": max((tnum(t["id"]) for t in m["threats"]), default=0)}}
+    json.dump(out, open(path, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+
+
 # ---------------------------------------------------------------- run
 def run(m, name="threat_model"):
     warns = validate(m)
@@ -453,7 +577,8 @@ def run(m, name="threat_model"):
     drawio(m, name + ".drawio", ix)
     reg = register(m, name + "_register.xlsx", ix)
     json.dump(m, open(name + "_model.json", "w", encoding="utf-8"), indent=1, ensure_ascii=False)
-    print("FILES:", name + ".drawio", reg, name + "_model.json")
+    threatdragon(m, name + "_threatdragon.json", ix)
+    print("FILES:", name + ".drawio", reg, name + "_model.json", name + "_threatdragon.json")
     for w in warns: print("WARNING:", w)
     for g in sorted(m["diagrams"], key=lambda g: (g.get("level", 0), g["id"])):
         print(f'MERMAID_START {g["id"]}: {g["title"]}\n' + mermaid(m, g["id"], ix) + "\nMERMAID_END")
