@@ -1,4 +1,4 @@
-# tm_generator.py  v2.0 - multi-level threat model renderer for the Copilot DFD agent
+# tm_generator.py  v2.1 - multi-level threat model renderer for the Copilot DFD agent
 # Copilot code interpreter: load this file with exec(open(path).read()), build MODEL (schema in TM-03), then run(MODEL, "<system>")
 # Command line: python tm_generator.py model.json [output_name]
 # Outputs: <name>.drawio (one page per diagram, clickable drill-down), <name>_register.xlsx (all levels, cross-referenced),
@@ -34,6 +34,15 @@ def ref_text(refs):
 
 def quotes(refs):
     return " | ".join('"' + r["quote"] + '"' for r in refs or [] if r.get("quote"))
+
+
+LINDDUN = {"L": "Linking", "I": "Identifying", "NR": "Non-repudiation", "DT": "Detecting", "DD": "Data disclosure",
+           "U": "Unawareness", "NC": "Non-compliance"}
+
+
+def linddun(t):
+    """LINDDUN codes cited in a threat's frameworks, e.g. 'DD, NC'."""
+    return ", ".join(re.findall(r"LINDDUN\s+([A-Z]+)", t.get("frameworks", "")))
 
 
 def tnum(i):
@@ -301,7 +310,7 @@ def mermaid(m, gid, ix=None):
 # ---------------------------------------------------------------- workbook
 THREAT_COLS = [("ID", 7), ("Diagram", 10), ("Level", 6), ("Target", 26), ("Severity", 9),
                ("Problem", 34), ("Problem detail", 50), ("Solution (control)", 50), ("Arch. improvement", 12),
-               ("Document reference", 22), ("Evidence (quote)", 40), ("STRIDE", 7), ("Frameworks", 24),
+               ("Document reference", 22), ("Evidence (quote)", 40), ("STRIDE", 7), ("LINDDUN", 9), ("Frameworks", 24),
                ("Likelihood", 9), ("Impact", 8), ("Score", 7), ("Refines (parent threat)", 12),
                ("Refined by (child threats)", 14), ("Related", 12), ("Open questions", 11), ("Status", 10), ("Owner", 14)]
 
@@ -320,7 +329,7 @@ def tables(m, ix=None):
     ts = sorted(m["threats"], key=lambda t: tnum(t["id"]))
     threats = [[t["id"], t["diagram"], lvl(t["diagram"]), _name(ix, t["target"]), t["severity"], t["title"],
                 t.get("description", ""), t.get("control", ""), ", ".join(ix["addressed_by"].get(t["id"], [])),
-                ref_text(t.get("refs")), quotes(t.get("refs")), t.get("stride", ""), t.get("frameworks", ""),
+                ref_text(t.get("refs")), quotes(t.get("refs")), t.get("stride", ""), linddun(t), t.get("frameworks", ""),
                 t["likelihood"], t["impact"], t["likelihood"] * t["impact"], t.get("refines", ""),
                 ", ".join(ix["refined_by"].get(t["id"], [])), ", ".join(t.get("related", [])),
                 ", ".join(ix["asked_in"].get(t["id"], [])), t.get("status", "Open"), t.get("owner", "")] for t in ts]

@@ -6,9 +6,9 @@ Each run produces outputs that always agree with each other:
 
 | Output | What you get |
 |---|---|
-| Mermaid diagrams in chat | One per level (L0, L1-P3, L2-P3.3…), with trust boundaries, numbered threat badges and `⚠T#` on data flows |
+| Diagrams and threats in chat | For each diagram (L0, L1-P3, L2-P3.3…): the Mermaid DFD with trust boundaries, numbered threat badges and `⚠T#` on data flows, followed by that diagram's threat table (STRIDE, LINDDUN, problem, solution, reference). Then a LINDDUN privacy summary |
 | `<system>.drawio` | One editable page per diagram. Click a decomposed process (⊞) to open its child page, click a grey context element to go back up, and hover anything to see its document references and threats |
-| `<system>_register.xlsx` | One workbook for all levels: **Threats** (problem, solution and document reference side by side, with clickable cross references), **Arch improvements**, **Open questions**, **Elements & flows**, **Diagrams**, **Documents** |
+| `<system>_register.xlsx` | One workbook for all levels: **Threats** (problem, solution and document reference side by side, STRIDE and LINDDUN columns, clickable cross references), **Arch improvements**, **Open questions**, **Elements & flows**, **Diagrams**, **Documents** |
 | `<system>_model.json` | The model itself, so you can rerun or update it later and keep the same IDs |
 
 ## How it works
@@ -28,6 +28,15 @@ flowchart TD
   G --> K["model .json"]
   G -. "MODEL INVALID / WARNING" .-> B
 ```
+
+**Same threat method at every level.** Each diagram, L0 or child, gets the full per-diagram method:
+- STRIDE per element;
+- LINDDUN wherever personal data appears;
+- the OWASP lists that apply (web, API, LLM, Agentic, CI/CD);
+- every trust-boundary-crossing flow assessed;
+- the same scoring.
+
+Decomposition adds diagrams. It never shortens the threat analysis.
 
 **Breaking components down without mega-diagrams.** A process gets its own child diagram only when all three of these are true:
 1. The documents describe three or more internal parts of it.
@@ -191,7 +200,7 @@ Extract from the Threats sheet. Problem, solution and reference sit together:
 
 | Path | What it is |
 |---|---|
-| `agent/agent_instructions.txt` | Paste into the agent's Instructions field (~6,200 characters; the limit is 8,000) |
+| `agent/agent_instructions.txt` | Paste into the agent's Instructions field (~6,250 characters; the limit is 8,000) |
 | `agent/tm_generator.txt` | Generator to attach in chat if the agent can't find it in its knowledge files |
 | `agent/tm_loader.py` | The STEP 0 loader (also embedded in the instructions): finds the generator attached or in TM-03 |
 | `knowledge/TM-0*.docx` | The four knowledge files to upload to the agent |
@@ -199,7 +208,7 @@ Extract from the Threats sheet. Problem, solution and reference sit together:
 | `generator/tm_generator.py` | Validator and renderer: JSON model → Mermaid + multi-page `.drawio` + multi-sheet `.xlsx` + `.json` |
 | `examples/` | Example documents, model, Mermaid, draw.io and workbook |
 | `tools/build_knowledge.py` | Rebuilds TM-03, TM-04, the `.docx` files, the examples and `agent/tm_generator.txt` |
-| `tests/test_generator.py` | 19 tests: validation rules, drill-down links, threat visibility, workbook cross references, quotes, framework IDs, loader |
+| `tests/test_generator.py` | 20 tests: validation rules, drill-down links, threat visibility, workbook cross references, quotes, framework IDs, loader |
 
 ### Knowledge files
 

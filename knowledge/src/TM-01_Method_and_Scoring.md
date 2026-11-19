@@ -86,6 +86,7 @@ Stop rules - do not decompose when:
 
 Building a child diagram:
 
+- Run the complete per-diagram method on it, exactly as for L0: STRIDE per element, LINDDUN wherever personal data is visible, the OWASP lists whose triggers match, the coverage rules and the scoring rubric. Decomposition adds diagrams; it never replaces or shortens the threat analysis.
 - Own elements and flows are prefixed with the parent ID (P3.1, P3.D1, P3.F1).
 - Every neighbour that exchanges data with the parent at the level above appears as a context element with the same ID and boundary type (the generator draws it grey and links it back).
 - A child flow that is the detailed form of a parent flow sets parent to the parent flow ID (P3.F6 parent F6). Every parent flow touching the decomposed process should be represented by at least one child flow.

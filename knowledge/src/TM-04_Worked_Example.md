@@ -85,11 +85,9 @@ Assumptions: F10 Review Portal to Case DB connection is not described in DOC1 an
         - L2-P3.3 Agent Orchestrator (decomposes P3.3) [DOC1 §4.4 p.12]: Stop at L2: each tool is a single function; no further structure in DOC1.
     - L1-P5 CI/CD Pipeline (decomposes P5) [DOC2 §2.1 p.4; DOC2 §3.1 p.7; DOC2 §3.2 p.8]: Stop at L1: jobs are single workflow definitions; DOC2 gives no further structure.
 
-## 3. Diagrams
+## 3. Diagrams and threats (L0 first, then each decomposition)
 
-Legend: rectangle = external entity, circle = process, double circle ⊞ = decomposed (see child diagram), cylinder = data store, grey dashed = context from another level, red dashed box = trust boundary, dashed line = assumed, hexagon = Critical/High threat, ⚠T# on an arrow = threat on that flow.
-
-## L0 System context - Document Intake & AI Summary Service [DOC1 §3.1-5.2; DOC2 §2.1-3.2]
+### L0 System context - Document Intake & AI Summary Service [DOC1 §3.1-5.2; DOC2 §2.1-3.2]
 
 ```mermaid
 flowchart LR
@@ -152,7 +150,23 @@ flowchart LR
   class T7 high
 ```
 
-## L1-P3 Summariser Agent - decomposes P3 [DOC1 §4.1 p.9 Table 4]
+| ID | Severity | STRIDE | LINDDUN | Target | Problem | Solution | Ref | Refines |
+|---|---|---|---|---|---|---|---|---|
+| T1 | Critical | I | DD, NC | F6: Prompt + doc text, HTTPS API key | Customer documents sent to third-party LLM | Use an enterprise endpoint with zero data retention and region pinning under a DPA; redact personal data before the prompt; complete a DPIA. | DOC1 §4.3 p.11 | - |
+| T2 | Critical | E | - | P3: Summariser Agent | Indirect prompt injection via uploaded documents | Treat document text as untrusted data and constrain what the agent can do (see child threats T14, T15). | DOC1 §4.1 p.9 Table 4 | - |
+| T3 | Critical | E | - | F12: Deploy images, cluster-admin kubeconfig | Cluster-admin credential used for deployment | Workload identity federation (OIDC) with a namespace-scoped deploy role; no static credentials in CI. | DOC2 §3.2 p.8 | - |
+| T4 | High | T | - | P2: Intake Service | Any file type accepted without content checks | Allow-list file types, enforce size limits, AV/CDR scan before any parsing, fail closed on errors. | DOC1 §3.4 p.7 | - |
+| T5 | High | S | - | P1: API Gateway + WAF | Long-lived customer session tokens | Short-lived access tokens with refresh rotation, revocation on logout and password change, MFA for account changes. | DOC1 §3.1 p.6 | - |
+| T6 | High | I | DD | D1: Document Blob Store | Guessable document paths | Random object keys, per-request ownership checks, SAS tokens scoped to one object with short expiry. | DOC1 §5.2 p.17 | - |
+| T7 | High | T | - | P5: CI/CD Pipeline | Untrusted pull requests can influence the pipeline | Separate the untrusted PR path from the trusted build and deploy path (see child threats T21, T24). | DOC2 §2.1 p.4 | - |
+| T8 | High | I | L | D3: Vector Index | Single shared vector index for all customers | Per-tenant namespaces with filters enforced server-side, not in the prompt. | DOC1 §4.5 p.13 | - |
+| T9 | Medium | I | - | F10: Read/update cases | Review Portal database connection not specified | Managed identity, TLS 1.2+, least-privilege stored procedures. | DOC1 gap; DOC1 §4.6 p.14 | - |
+| T10 | Medium | R | NR | D2: Case DB (SQL) | No audit trail for case changes | Append-only audit log capturing user and agent identity for every case change. | DOC1 gap; DOC1 §4.6 p.14 | - |
+| T11 | Medium | D | - | F6: Prompt + doc text, HTTPS API key | No limit on document length sent to the model | Per-tenant quotas, maximum tokens per job, circuit breaker on spend. | DOC1 §4.3 p.11 | - |
+| T12 | Medium | E | - | P4: Review Portal | Reviewers approve summaries without seeing sources | Show source citations next to the summary; require reviewer attestation; sample QA. | DOC1 §4.6 p.14 | - |
+| T13 | Low | R | U | E1: Customer (browser) | Customers not told documents are AI-processed | Privacy notice and consent text at upload; record the notice version accepted. | DOC1 gap; DOC1 §3.1 p.6 | - |
+
+### L1-P3 Summariser Agent - decomposes P3 [DOC1 §4.1 p.9 Table 4]
 
 ```mermaid
 flowchart LR
@@ -201,7 +215,17 @@ flowchart LR
   class E3 ctx
 ```
 
-## L1-P5 CI/CD Pipeline - decomposes P5 [DOC2 §2.1 p.4; DOC2 §3.1 p.7; DOC2 §3.2 p.8]
+| ID | Severity | STRIDE | LINDDUN | Target | Problem | Solution | Ref | Refines |
+|---|---|---|---|---|---|---|---|---|
+| T14 | Critical | T | - | P3.2: Prompt Builder | Untrusted document text mixed into the system prompt | Spotlighting: wrap untrusted text in delimiters with an explicit data-only instruction; keep system prompt separate; strip instruction-like content. | DOC1 §4.3 p.11 | T2 |
+| T15 | Critical | E | - | P3.3: Agent Orchestrator | Agent executes write tools with service credentials | Least agency: read-only tools by default; writes become proposals approved in the Review Portal; user-scoped tokens for tool calls (see T26-T28). | DOC1 §4.4 p.12 | T2 |
+| T16 | High | E | - | P3.1: Text Extractor | Parsers share a container with the orchestrator | Run extraction in a separate sandboxed container with no credentials and no egress; patch parsing libraries from a curated repository. | DOC1 §4.2 p.10 | - |
+| T17 | High | I | DD | P3.F4: Query top-5 chunks | Retrieval query has no tenant filter | Server-side tenant filter on every query; per-tenant namespaces. | DOC1 §4.3 p.11; DOC1 §4.5 p.13 | T8 |
+| T18 | High | S | - | P3.F6: Prompt + doc text, API key from env var | LLM API key held in an environment variable | Managed identity or Key Vault reference with rotation; separate key per environment; egress restricted to the LLM endpoint. | DOC1 §4.3 p.11 | - |
+| T19 | Medium | T | - | P3.4: Response Validator | Validator checks format only | Add grounding checks against source text and block outputs containing instructions or links before writing. | DOC1 §4.1 p.9 Table 4 | - |
+| T20 | Medium | I | DD | P3.D1: Conversation cache (Redis) | Conversation cache holds document content for 7 days | Minimise cached content, 24-hour TTL, Redis AUTH with TLS, private endpoint. | DOC1 §4.4 p.12 | - |
+
+### L1-P5 CI/CD Pipeline - decomposes P5 [DOC2 §2.1 p.4; DOC2 §3.1 p.7; DOC2 §3.2 p.8]
 
 ```mermaid
 flowchart LR
@@ -248,7 +272,15 @@ flowchart LR
   class P2 ctx
 ```
 
-## L2-P3.3 Agent Orchestrator - decomposes P3.3 [DOC1 §4.4 p.12]
+| ID | Severity | STRIDE | LINDDUN | Target | Problem | Solution | Ref | Refines |
+|---|---|---|---|---|---|---|---|---|
+| T21 | Critical | I | - | P5.F4: Secrets exposed to PR jobs | Repository secrets exposed to pull request jobs | No secrets for PR workflows; ephemeral isolated runners for untrusted code; environment protection rules for secrets. | DOC2 §2.1 p.4 | T7 |
+| T22 | Critical | E | - | P5.F7: Cluster-admin kubeconfig | Cluster-admin kubeconfig stored as a repository secret | OIDC federation to a namespace-scoped deploy identity; remove the kubeconfig secret. | DOC2 §3.2 p.8 | T3 |
+| T23 | High | T | - | P5.3: Deploy job | Images deployed without signature verification | Sign images at build (Sigstore or Notation) with SLSA provenance; admission policy in AKS rejects unsigned images. | DOC2 §3.2 p.8 | - |
+| T24 | High | T | - | P5.D1: Source repo + workflows | Third-party actions referenced by mutable tags | Pin actions by full commit SHA; allow-list approved actions; automated update PRs. | DOC2 §2.3 p.5 | T7 |
+| T25 | Medium | S | - | P5.F5: ACR service principal secret | Static service principal secret for the registry | OIDC federation for ACR push; scoped push-only role. | DOC2 §3.1 p.7 | - |
+
+### L2-P3.3 Agent Orchestrator - decomposes P3.3 [DOC1 §4.4 p.12]
 
 ```mermaid
 flowchart LR
@@ -295,7 +327,18 @@ flowchart LR
   class E3 ctx
 ```
 
-## 4. Threat summary
+| ID | Severity | STRIDE | LINDDUN | Target | Problem | Solution | Ref | Refines |
+|---|---|---|---|---|---|---|---|---|
+| T26 | Critical | E | - | P3.3.4: update_case tool | update_case can change any case without approval | Replace with propose_case_update limited to the current case ID; the reviewer approves in the Review Portal. | DOC1 §4.4 p.12 | T15 |
+| T27 | High | T | - | P3.3.2: Tool router | Tool router executes model requests without validation | Allow-list tools per job type; schema-validate and bound every parameter; log every tool call with the job ID. | DOC1 §4.1 p.9 Table 4 | T15 |
+| T28 | High | I | DD | P3.3.3: search_cases tool | search_cases is not scoped to the customer | Scope search_cases to the current customer using a user-scoped token or row-level security. | DOC1 §4.4 p.12 | T15 |
+| T29 | Medium | I | DD, L | P3.3.F8: Conversation state incl. tool results | Tool results persisted in conversation memory | Do not persist tool results; partition memory per case; 24-hour TTL. | DOC1 §4.4 p.12 | T20 |
+
+## 4. Legend
+
+Rectangle = external entity, circle = process, double circle ⊞ = decomposed (see child diagram), cylinder = data store, grey dashed = context from another level, red dashed box = trust boundary, dashed line = assumed, hexagon = Critical/High threat, ⚠T# on an arrow = threat on that flow.
+
+## 5. Threat summary
 
 | Diagram | Level | Critical | High | Medium | Low |
 |---|---|---|---|---|---|
@@ -304,37 +347,26 @@ flowchart LR
 | L1-P5 | L1 | 2 | 2 | 1 | 0 |
 | L2-P3.3 | L2 | 1 | 2 | 1 | 0 |
 
-| ID | Diagram | Target | Severity | Problem | Solution | Ref | Refines / Refined by |
-|---|---|---|---|---|---|---|---|
-| T1 | L0 | F6: Prompt + doc text, HTTPS API key | Critical | Customer documents sent to third-party LLM | Use an enterprise endpoint with zero data retention and region pinning under a DPA; redact personal data before the prompt; complete a DPIA. | DOC1 §4.3 p.11 | - / - |
-| T2 | L0 | P3: Summariser Agent | Critical | Indirect prompt injection via uploaded documents | Treat document text as untrusted data and constrain what the agent can do (see child threats T14, T15). | DOC1 §4.1 p.9 Table 4 | - / T14, T15 |
-| T3 | L0 | F12: Deploy images, cluster-admin kubeconfig | Critical | Cluster-admin credential used for deployment | Workload identity federation (OIDC) with a namespace-scoped deploy role; no static credentials in CI. | DOC2 §3.2 p.8 | - / T22 |
-| T4 | L0 | P2: Intake Service | High | Any file type accepted without content checks | Allow-list file types, enforce size limits, AV/CDR scan before any parsing, fail closed on errors. | DOC1 §3.4 p.7 | - / - |
-| T5 | L0 | P1: API Gateway + WAF | High | Long-lived customer session tokens | Short-lived access tokens with refresh rotation, revocation on logout and password change, MFA for account changes. | DOC1 §3.1 p.6 | - / - |
-| T6 | L0 | D1: Document Blob Store | High | Guessable document paths | Random object keys, per-request ownership checks, SAS tokens scoped to one object with short expiry. | DOC1 §5.2 p.17 | - / - |
-| T7 | L0 | P5: CI/CD Pipeline | High | Untrusted pull requests can influence the pipeline | Separate the untrusted PR path from the trusted build and deploy path (see child threats T21, T24). | DOC2 §2.1 p.4 | - / T21, T24 |
-| T8 | L0 | D3: Vector Index | High | Single shared vector index for all customers | Per-tenant namespaces with filters enforced server-side, not in the prompt. | DOC1 §4.5 p.13 | - / T17 |
-| T14 | L1-P3 | P3.2: Prompt Builder | Critical | Untrusted document text mixed into the system prompt | Spotlighting: wrap untrusted text in delimiters with an explicit data-only instruction; keep system prompt separate; strip instruction-like content. | DOC1 §4.3 p.11 | T2 / - |
-| T15 | L1-P3 | P3.3: Agent Orchestrator | Critical | Agent executes write tools with service credentials | Least agency: read-only tools by default; writes become proposals approved in the Review Portal; user-scoped tokens for tool calls (see T26-T28). | DOC1 §4.4 p.12 | T2 / T26, T27, T28 |
-| T16 | L1-P3 | P3.1: Text Extractor | High | Parsers share a container with the orchestrator | Run extraction in a separate sandboxed container with no credentials and no egress; patch parsing libraries from a curated repository. | DOC1 §4.2 p.10 | - / - |
-| T17 | L1-P3 | P3.F4: Query top-5 chunks | High | Retrieval query has no tenant filter | Server-side tenant filter on every query; per-tenant namespaces. | DOC1 §4.3 p.11; DOC1 §4.5 p.13 | T8 / - |
-| T18 | L1-P3 | P3.F6: Prompt + doc text, API key from env var | High | LLM API key held in an environment variable | Managed identity or Key Vault reference with rotation; separate key per environment; egress restricted to the LLM endpoint. | DOC1 §4.3 p.11 | - / - |
-| T21 | L1-P5 | P5.F4: Secrets exposed to PR jobs | Critical | Repository secrets exposed to pull request jobs | No secrets for PR workflows; ephemeral isolated runners for untrusted code; environment protection rules for secrets. | DOC2 §2.1 p.4 | T7 / - |
-| T22 | L1-P5 | P5.F7: Cluster-admin kubeconfig | Critical | Cluster-admin kubeconfig stored as a repository secret | OIDC federation to a namespace-scoped deploy identity; remove the kubeconfig secret. | DOC2 §3.2 p.8 | T3 / - |
-| T23 | L1-P5 | P5.3: Deploy job | High | Images deployed without signature verification | Sign images at build (Sigstore or Notation) with SLSA provenance; admission policy in AKS rejects unsigned images. | DOC2 §3.2 p.8 | - / - |
-| T24 | L1-P5 | P5.D1: Source repo + workflows | High | Third-party actions referenced by mutable tags | Pin actions by full commit SHA; allow-list approved actions; automated update PRs. | DOC2 §2.3 p.5 | T7 / - |
-| T26 | L2-P3.3 | P3.3.4: update_case tool | Critical | update_case can change any case without approval | Replace with propose_case_update limited to the current case ID; the reviewer approves in the Review Portal. | DOC1 §4.4 p.12 | T15 / - |
-| T27 | L2-P3.3 | P3.3.2: Tool router | High | Tool router executes model requests without validation | Allow-list tools per job type; schema-validate and bound every parameter; log every tool call with the job ID. | DOC1 §4.1 p.9 Table 4 | T15 / - |
-| T28 | L2-P3.3 | P3.3.3: search_cases tool | High | search_cases is not scoped to the customer | Scope search_cases to the current customer using a user-scoped token or row-level security. | DOC1 §4.4 p.12 | T15 / - |
+Privacy (LINDDUN) - personal data is in customer documents, prompts, the vector index and agent memory:
 
-## 5. Review findings
+| LINDDUN category | Threats |
+|---|---|
+| L Linking | T8, T29 |
+| I Identifying | none found |
+| NR Non-repudiation | T10 |
+| DT Detecting | none found |
+| DD Data disclosure | T1, T6, T17, T20, T28, T29 |
+| U Unawareness | T13 |
+| NC Non-compliance | T1 |
+
+## 6. Review findings
 
 - Coverage: every Critical/High threat on a decomposed element is refined in its child (T2 by T14 and T15; T7 by T21 and T24; T15 by T26-T28). All Critical and High threats are addressed by an improvement. All gap threats (T9, T10, T13) have questions. Generator warnings: none.
 - Cross-level pattern 1 - untrusted content reaches privileged components: crafted uploads (T4) reach parsers that share a container with the orchestrator (T16), are mixed into the prompt (T14) and can drive write tools (T26). One structural change (R1 + R2) addresses the chain.
 - Cross-level pattern 2 - static, over-privileged credentials: the cluster-admin kubeconfig (T3, T22), the registry secret (T25) and the LLM API key (T18) are all long-lived secrets. R3 and R6 move to workload identity.
 - Cross-level pattern 3 - shared stores without tenant partitioning: blob paths (T6), vector index (T8, T17), search tool (T28) and agent memory (T29). R5 applies one tenant-isolation model across them.
 
-## 6. Architecture improvements
+## 7. Architecture improvements
 
 | ID | Priority | Improvement | Addresses | Ref |
 |---|---|---|---|---|
@@ -347,7 +379,7 @@ flowchart LR
 | R7 | P3 | Session hardening at the edge | T5 | DOC1 §3.1 p.6 |
 | R8 | P2 | Accountable human review | T10, T12, T19 | DOC1 §4.6 p.14 |
 
-## 7. Open questions
+## 8. Open questions
 
 | ID | Question | Ref | Threats |
 |---|---|---|---|
@@ -358,7 +390,7 @@ flowchart LR
 | Q5 | Is the Redis cache encrypted, network-isolated and protected with authentication? | DOC1 §4.4 p.12 | T20, T29 |
 | Q6 | Are the self-hosted runners ephemeral, and which workflows can read which secrets? | DOC2 §2.1 p.4 | T21 |
 
-## 8. Downloads
+## 9. Downloads
 
 example_threat_model.drawio (four pages with drill-down), example_threat_model_register.xlsx (all levels, cross-referenced) and the model JSON, produced by tm_generator.py.
 
@@ -1924,7 +1956,7 @@ example_threat_model.drawio (four pages with drill-down), example_threat_model_r
    "likelihood": 3,
    "impact": 4,
    "stride": "I",
-   "frameworks": "LLM09:2026; A01:2025",
+   "frameworks": "LLM09:2026; A01:2025; LINDDUN DD",
    "title": "Retrieval query has no tenant filter",
    "description": "Top-5 retrieval runs across the shared index, so chunks from other customers' documents enter the prompt.",
    "control": "Server-side tenant filter on every query; per-tenant namespaces.",
@@ -2178,7 +2210,7 @@ example_threat_model.drawio (four pages with drill-down), example_threat_model_r
    "likelihood": 3,
    "impact": 4,
    "stride": "I",
-   "frameworks": "ASI03; A01:2025; LLM02:2026",
+   "frameworks": "ASI03; A01:2025; LLM02:2026; LINDDUN DD",
    "title": "search_cases is not scoped to the customer",
    "description": "Injected instructions can make the model search and summarise other customers' cases.",
    "control": "Scope search_cases to the current customer using a user-scoped token or row-level security.",
@@ -2203,7 +2235,7 @@ example_threat_model.drawio (four pages with drill-down), example_threat_model_r
    "likelihood": 2,
    "impact": 4,
    "stride": "I",
-   "frameworks": "ASI06; LLM02:2026",
+   "frameworks": "ASI06; LLM02:2026; LINDDUN DD; LINDDUN L",
    "title": "Tool results persisted in conversation memory",
    "description": "Results from search_cases, possibly other customers' data, are stored in the cache and reused in later prompts.",
    "control": "Do not persist tool results; partition memory per case; 24-hour TTL.",

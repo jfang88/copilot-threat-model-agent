@@ -197,6 +197,18 @@ def test_loader_prefers_attached_txt():
     assert got == (ROOT / "agent" / "tm_generator.txt").read_text(encoding="utf-8")
 
 
+def test_linddun_column_and_per_diagram_method():
+    cols, rows = g.tables(MODEL)["Threats"]
+    row = {r[0]: dict(zip(cols, r)) for r in rows}
+    assert cols[cols.index("STRIDE") + 1] == "LINDDUN"
+    assert row["T1"]["LINDDUN"] == "DD, NC"
+    ins = (ROOT / "agent" / "agent_instructions.txt").read_text(encoding="utf-8")
+    assert "PER-DIAGRAM METHOD (run in full for L0 and for every child diagram)" in ins
+    for word in ("STRIDE per element", "LINDDUN whenever personal data", "OWASP Top 10:2025", "API Security 2023",
+                 "LLM 2026", "Agentic 2026", "CI/CD Top 10", "every flow that crosses a trust boundary"):
+        assert word in ins, word
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
