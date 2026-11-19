@@ -1,6 +1,6 @@
 ---
 title: "TM-02 Threat Library and Framework Selection"
-subtitle: "Knowledge file for the Copilot DFD Threat Model agent - v1.0 (frameworks current as of November 2026)"
+subtitle: "Knowledge file for the Copilot DFD Threat Model agent - v2.0 (frameworks current as of November 2026)"
 ---
 
 # TM-02 How to use this library
