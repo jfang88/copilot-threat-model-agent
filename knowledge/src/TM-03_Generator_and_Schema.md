@@ -18,15 +18,7 @@ It prints WARNING for: a Critical/High threat not addressed by any improvement; 
 
 # TM-03 How the agent runs it
 
-1. If tm_generator.txt is attached to the chat, load it in code interpreter without retyping:
-
-```python
-import glob
-p = [f for d in ('/mnt/data', '.', '/mnt', '/tmp', '/home') for f in glob.glob(d + '/**/tm_generator*.txt', recursive=True)][0]
-exec(open(p).read())
-```
-
-   Otherwise copy the script at the end of this file exactly. Do not rewrite, shorten or restructure it.
+1. Load the script with the STEP 0 loader in the agent instructions (copy in agent/tm_loader.py). It looks for an attached tm_generator.txt first; if there is none, it extracts the script from the code block at the end of this file (TM-03 docx) when code interpreter can see the knowledge files. If neither is found it raises FileNotFoundError and the agent asks the user to attach tm_generator.txt. Never retype or rewrite the script.
 2. Build MODEL in parts to keep each step short, for example:
 
 ```python

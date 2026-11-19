@@ -149,6 +149,54 @@ def test_framework_ids_exist_in_library():
                 assert f in LIBRARY, f
 
 
+def _loader_code():
+    return "".join(l for l in (ROOT / "agent" / "tm_loader.py").read_text(encoding="utf-8").splitlines(True)
+                   if not l.startswith("#")).strip()
+
+
+def test_loader_in_instructions_matches_reference_copy():
+    assert _loader_code() in (ROOT / "agent" / "agent_instructions.txt").read_text(encoding="utf-8")
+
+
+def _run_loader(tmp, files):
+    import os, shutil
+    for f in files:
+        shutil.copy(f, tmp)
+    cwd = os.getcwd()
+    os.chdir(tmp)
+    try:
+        ns = {"__name__": "__main__"}
+        code = _loader_code().replace("exec(tm_src())", "SRC = tm_src()")
+        code = code.replace("('/mnt/data','.','/mnt','/tmp','/home')", "('.',)")  # search only the temp dir
+        assert "('.',)" in code
+        exec(code, ns)
+        return ns["SRC"]
+    finally:
+        os.chdir(cwd)
+
+
+def test_loader_extracts_exact_script_from_tm03_docx():
+    src = (ROOT / "generator" / "tm_generator.py").read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as d:
+        got = _run_loader(d, [ROOT / "knowledge" / "TM-03_Generator_and_Schema.docx"])
+    assert got.rstrip() == src.rstrip()
+
+
+def test_loader_raises_when_nothing_found():
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            _run_loader(d, [])
+    except FileNotFoundError:
+        return
+    raise AssertionError("expected FileNotFoundError")
+
+
+def test_loader_prefers_attached_txt():
+    with tempfile.TemporaryDirectory() as d:
+        got = _run_loader(d, [ROOT / "agent" / "tm_generator.txt", ROOT / "knowledge" / "TM-03_Generator_and_Schema.docx"])
+    assert got == (ROOT / "agent" / "tm_generator.txt").read_text(encoding="utf-8")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

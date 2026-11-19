@@ -191,14 +191,15 @@ Extract from the Threats sheet. Problem, solution and reference sit together:
 
 | Path | What it is |
 |---|---|
-| `agent/agent_instructions.txt` | Paste into the agent's Instructions field (~5,500 characters; the limit is 8,000) |
-| `agent/tm_generator.txt` | Generator to attach in chat with the documents. The agent loads it with `exec` instead of retyping it |
+| `agent/agent_instructions.txt` | Paste into the agent's Instructions field (~6,200 characters; the limit is 8,000) |
+| `agent/tm_generator.txt` | Generator to attach in chat if the agent can't find it in its knowledge files |
+| `agent/tm_loader.py` | The STEP 0 loader (also embedded in the instructions): finds the generator attached or in TM-03 |
 | `knowledge/TM-0*.docx` | The four knowledge files to upload to the agent |
 | `knowledge/src/*.md` | Editable source for the knowledge files (TM-03 and TM-04 are generated) |
 | `generator/tm_generator.py` | Validator and renderer: JSON model → Mermaid + multi-page `.drawio` + multi-sheet `.xlsx` + `.json` |
 | `examples/` | Example documents, model, Mermaid, draw.io and workbook |
 | `tools/build_knowledge.py` | Rebuilds TM-03, TM-04, the `.docx` files, the examples and `agent/tm_generator.txt` |
-| `tests/test_generator.py` | 15 tests: validation rules, drill-down links, threat visibility, workbook cross references, quotes, framework IDs |
+| `tests/test_generator.py` | 19 tests: validation rules, drill-down links, threat visibility, workbook cross references, quotes, framework IDs, loader |
 
 ### Knowledge files
 
@@ -217,14 +218,27 @@ Full Copilot Studio is **not** required.
 2. Paste `agent/agent_instructions.txt` into **Instructions**.
 3. Upload `knowledge/*.docx` as **Knowledge**. If a `.docx` upload fails, export it to PDF and upload that instead.
 4. Check that code interpreter is on (**Create documents, charts, and code**). It's on by default in Agent Builder.
-5. Add a conversation starter such as *"Threat model the attached documents. Attach tm_generator.txt too."*
+5. Add a conversation starter such as *"Threat model the attached documents."*
 
 ### Using the agent
 
 - **Attach the design documents directly in the chat.** PDFs give the most reliable page numbers.
-- **Attach `agent/tm_generator.txt` as well.** The agent loads it with `exec` instead of retyping about 450 lines.
 - **Download the `.drawio`, `.xlsx` and `_model.json` before you close the chat.** Files that code interpreter creates are only kept for the session.
 - **Discuss findings by ID**, for example *"Explain T15 and what R1 changes"* or *"What did DOC1 §4.4 drive?"*. When the documents change, re-attach `_model.json` and the new versions. The agent keeps existing IDs and adds new ones.
+
+### Getting the generator into each run
+
+The agent's first step (STEP 0 in the instructions, copy in [`agent/tm_loader.py`](agent/tm_loader.py)) is a small loader. It finds the generator by itself, in this order:
+
+1. **An attached `tm_generator.txt`.** This always works.
+2. **The TM-03 knowledge file.** If code interpreter can see the agent's knowledge files, the loader extracts the script from the code block in `TM-03_Generator_and_Schema.docx`. In that case you never need to attach anything. The extraction is tested to match the script exactly.
+3. **Neither.** The agent stops before doing any analysis and asks you to attach `tm_generator.txt`. You can't forget, because the agent reminds you.
+
+**Check once whether route 2 works in your tenant.** Ask the agent: *"Run STEP 0 only and tell me which file it loaded from."*
+- If it loaded from TM-03, there's nothing more to do.
+- If it asks for the file, keep `tm_generator.txt` somewhere quick to reach, such as a OneDrive folder, and attach it alongside the documents. You can also add a conversation starter such as *"Threat model the attached documents (attach the design docs + tm_generator.txt)"*.
+
+To remove the attachment step completely, use full Copilot Studio and host `tm_generator.py` as an Azure Function called as an agent action. The agent sends the JSON model and gets the files back. This needs an Azure subscription.
 
 ### Licensing
 
@@ -280,7 +294,7 @@ If you change the generator, the example model or the TM sources, run the build 
 ## Known limitations
 
 - **Page numbers depend on the file format.** Word files without visible page numbers produce section-only references.
-- **Microsoft doesn't document whether code interpreter can read knowledge files**, so attach `tm_generator.txt` to the chat.
+- **Microsoft doesn't document whether code interpreter can read knowledge files.** The loader tries, and the agent asks for `tm_generator.txt` if it can't.
 - **The draw.io layout is simple:** one column per trust boundary, wrapping after four elements. Long cross-diagram flows may need tidying by hand.
 - **Very large document sets** may need several runs, one per subsystem. Reuse `_model.json` between runs so IDs carry over.
 - **For a fully predictable setup**, host `tm_generator.py` as an Azure Function and call it as an action from a full Copilot Studio agent.
