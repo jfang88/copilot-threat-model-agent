@@ -1,0 +1,57 @@
+flowchart LR
+  subgraph TB1["TB1: Internet"]
+    E1["E1: Customer (browser)"]
+    E2["E2: Staff reviewer"]
+  end
+  style TB1 stroke:#c0392b,stroke-dasharray:6 4
+  subgraph TB2["TB2: DMZ / Edge"]
+    P1(("P1: API Gateway + WAF"))
+    T5{{"T5 High"}} -.- P1
+  end
+  style TB2 stroke:#c0392b,stroke-dasharray:6 4
+  subgraph TB3["TB3: App tier (AKS)"]
+    P2(("P2: Intake Service"))
+    T4{{"T4 High"}} -.- P2
+    P3(("P3: Summariser Agent"))
+    T2{{"T2 Critical"}} -.- P3
+    P4(("P4: Review Portal"))
+  end
+  style TB3 stroke:#c0392b,stroke-dasharray:6 4
+  subgraph TB4["TB4: Data tier"]
+    D1[("D1: Document Blob Store")]
+    T6{{"T6 High"}} -.- D1
+    D2[("D2: Case DB (SQL)")]
+    D3[("D3: Vector Index")]
+    T8{{"T8 High"}} -.- D3
+  end
+  style TB4 stroke:#c0392b,stroke-dasharray:6 4
+  subgraph TB5["TB5: Third-party AI service"]
+    E3["E3: Hosted LLM API"]
+  end
+  style TB5 stroke:#c0392b,stroke-dasharray:6 4
+  subgraph TB6["TB6: Build & deploy plane"]
+    E4["E4: Developer"]
+    P5(("P5: CI/CD Pipeline"))
+    T7{{"T7 High"}} -.- P5
+  end
+  style TB6 stroke:#c0392b,stroke-dasharray:6 4
+  E1 -->|"F1: Upload doc + session token, HTTPS"| P1
+  P1 -->|"F2: Upload request, mTLS"| P2
+  P2 -->|"F3: Write document, managed identity"| D1
+  P2 -->|"F4: Summarise job, queue message"| P3
+  P3 -->|"F5: Read document"| D1
+  P3 -->|"F6: Prompt + doc text, HTTPS API key ⚠T1,T11"| E3
+  P3 -->|"F7: Write/query embeddings"| D3
+  P3 -->|"F8: Write summary + case record, SQL"| D2
+  E2 -->|"F9: Review UI, Entra ID SSO"| P4
+  P4 -.->|"F10: Read/update cases, SQL (ASSUMED) ⚠T9"| D2
+  E4 -->|"F11: Git push / PR"| P5
+  P5 -->|"F12: Deploy images, cluster admin token ⚠T3"| P2
+  classDef crit fill:#f8d7da,stroke:#b02a37,color:#58151c
+  classDef high fill:#fff3cd,stroke:#b8860b,color:#5c4400
+  class T5 high
+  class T4 high
+  class T2 crit
+  class T6 high
+  class T8 high
+  class T7 high
