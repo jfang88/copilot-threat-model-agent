@@ -1,16 +1,18 @@
 # Copilot Threat Model Agent
 
-A Microsoft 365 Copilot agent that reads design documents and produces a **multi-level threat model**. It starts with a system context diagram (L0), breaks down the components that need a closer look into L1 and L2 diagrams, reviews the result, and proposes architecture improvements. Every element, threat, improvement and question cites **document, section, page and a short quote**, so a finding can be discussed by ID: "T14 on P3.2, DOC1 §4.3 p.11".
+A Microsoft 365 Copilot agent that reads design documents and produces a **multi-level threat model with attack paths**. It starts with a system context diagram (L0), breaks down the components that need a closer look into L1 and L2 diagrams, reviews the result, and proposes architecture improvements. Every element, threat, improvement and question cites **document, section, page and a short quote**, so a finding can be discussed by ID: "T14 on P3.2, DOC1 §4.3 p.11".
 
 Each run produces outputs that always agree with each other:
 
 | Output | What you get |
 |---|---|
-| Diagrams and threats in chat | For each diagram (L0, L1-P3, L2-P3.3…): the Mermaid DFD with trust boundaries, numbered threat badges and `⚠T#` on data flows, followed by that diagram's threat table (STRIDE, LINDDUN, problem, solution, reference). Then a LINDDUN privacy summary |
-| `<system>.drawio` | One editable page per diagram. Click a decomposed process (⊞) to open its child page, click a grey context element to go back up, and hover anything to see its document references and threats |
-| `<system>_register.xlsx` | One workbook for all levels: **Threats** (problem, solution and document reference side by side, STRIDE and LINDDUN columns, clickable cross references), **Arch improvements**, **Open questions**, **Elements & flows**, **Diagrams**, **Documents** |
-| `<system>_model.json` | The model itself, so you can rerun or update it later and keep the same IDs |
-| `<system>_threatdragon.json` | The same model for [OWASP Threat Dragon](https://owasp.org/www-project-threat-dragon/) (v2 format). You get one Threat Dragon diagram per level, with trust boundaries, elements, flows and every threat. Each threat keeps its severity, STRIDE type, mitigation and score, and its title and description carry the T# ID, references and cross references. Open it in Threat Dragon with *Open an existing threat model* |
+| **Report in chat** (`<system>_report.md`) | The full report, pasted by the agent: scope, decomposition map, each DFD as Mermaid with its threat table (STRIDE, LINDDUN, problem, solution, reference), threat and LINDDUN summary, **attack paths** (Mermaid chain + step table), review, improvements, questions. Saved as Markdown too, so nothing is lost if the chat cuts it short |
+| `<system>.drawio` | One editable page per DFD and per attack path. Click ⊞ to drill down, click a grey context element to go back up, click an attack step to jump to its DFD, hover for references |
+| `<system>_deck.pptx` | Consulting-style PowerPoint built from **native, editable shapes**. It has an executive summary, the decomposition map, an L0/L1/L2 DFD slide each (connectors glued to shapes), threat tables, attack path chain slides with step tables, improvements, questions and a legend. Every slide has an action title and a source line |
+| `<system>_register.xlsx` | One workbook: **Threats** (problem, solution and reference side by side; STRIDE, LINDDUN, cross references, attack paths), **Diagram images** (every DFD and attack path embedded as a picture), **Arch improvements**, **Open questions**, **Attack paths**, **Elements & flows**, **Diagrams**, **Documents** |
+| `<system>_diagrams_png.zip` | One PNG per DFD and per attack path |
+| `<system>_model.json` | The model itself. Re-attach it later to update and keep the same IDs |
+| `<system>_threatdragon.json` | The same model for [OWASP Threat Dragon](https://owasp.org/www-project-threat-dragon/) (v2 format). Open it with *Open an existing threat model* |
 
 ## How it works
 
@@ -22,12 +24,16 @@ flowchart TD
   D --> C
   C -- no / L2 reached --> E["Review<br/>coverage, consistency, cross-level patterns"]
   E --> F["Architecture improvements R#<br/>Open questions Q#"]
-  F --> G["tm_generator.py<br/>validate + render"]
+  F --> AP["Attack paths AP#<br/>entry → threats across levels → objective"]
+  AP --> G["tm_generator.py<br/>validate + render"]
   G --> H["Mermaid per level"]
   G --> I[".drawio (multi-page)"]
   G --> J[".xlsx (all levels)"]
   G --> K["model .json"]
   G --> L["Threat Dragon .json"]
+  G --> M["PowerPoint deck"]
+  G --> N["PNG images<br/>(also inside the .xlsx)"]
+  G --> O["report .md<br/>(pasted into chat)"]
   G -. "MODEL INVALID / WARNING" .-> B
 ```
 
@@ -56,6 +62,12 @@ Stopping points:
 - **Child flows point to the flow they detail** (`parent`).
 - **Child threats point to the parent threat they detail** (`refines`). The generator works out the reverse links itself: "Refined by", "Addressed by" (improvements) and "Open questions".
 
+**Attack paths.** After threats are found at every level, the agent models 3–6 key attack paths (AP#).
+- Each path starts at a realistic attacker entry point (an external entity) and ends at a business objective.
+- Each step is an existing threat at any level, plus the attacker's action at that step. Using the most detailed threat available means a path typically runs L0 → L1 → L2.
+- Paths are scored for the whole chain with the same likelihood × impact bands.
+- The generator works out which architecture improvement breaks each step. Every path must be broken by at least one improvement.
+
 **References.** The short form is `DOC1 §4.3 p.11 Table 4`.
 - Page numbers are only used when the document actually shows them, and are never guessed.
 - If the documents say nothing about something, the reference is `DOC1 gap` and the agent raises a question for the authors.
@@ -74,7 +86,7 @@ It prints `WARNING` if:
 
 ## Example output
 
-These come from the fictional design documents in [`examples/example_spec.md`](examples/example_spec.md). In total there are 4 diagrams, 29 threats, 8 architecture improvements and 6 open questions.
+These come from the fictional design documents in [`examples/example_spec.md`](examples/example_spec.md). In total there are 4 diagrams, 29 threats, 3 attack paths, 8 architecture improvements and 6 open questions. The full report is in [`examples/example_report.md`](examples/example_report.md); GitHub draws all its Mermaid diagrams.
 
 **L0 System context.** The double circles marked ⊞ are broken down further.
 
@@ -188,7 +200,54 @@ flowchart LR
   class E3 ctx
 ```
 
-The L1-P5 CI/CD pipeline and L2-P3.3 agent orchestrator diagrams are in [`examples/example_dfd.mmd`](examples/example_dfd.mmd) and in the draw.io file. Open [`examples/example_threat_model.drawio`](examples/example_threat_model.drawio) in draw.io, [`examples/example_threatdragon.json`](examples/example_threatdragon.json) in Threat Dragon, and [`examples/example_threat_model_register.xlsx`](examples/example_threat_model_register.xlsx) in Excel to see the full outputs.
+**AP1 Poisoned upload hijacks the agent** (Critical). Each step is a threat at a different level; green hexagons are the improvements that break it.
+
+```mermaid
+flowchart LR
+  A0["Attacker: External attacker with a customer account<br/>entry E1"]
+  S1["1. T4 High - P2: Intake Service<br/>Upload a PDF with hidden instructions; any file type is accepted"]
+  A0 --> S1
+  B1_R2{{"R2 breaks"}} -.- S1
+  S2["2. T14 Critical - P3.2: Prompt Builder<br/>Hidden text is concatenated into the prompt and read as instructions"]
+  S1 --> S2
+  B2_R2{{"R2 breaks"}} -.- S2
+  S3["3. T27 High - P3.3.2: Tool router<br/>Model requests tool calls that the router executes without validation"]
+  S2 --> S3
+  B3_R1{{"R1 breaks"}} -.- S3
+  S4["4. T28 High - P3.3.3: search_cases tool<br/>search_cases returns other customers' cases into the summary"]
+  S3 --> S4
+  B4_R1{{"R1 breaks"}} -.- S4
+  S5["5. T26 Critical - P3.3.4: update_case tool<br/>update_case changes case status and summary with service credentials"]
+  S4 --> S5
+  B5_R1{{"R1 breaks"}} -.- S5
+  S6["6. T10 Medium - D2: Case DB (SQL)<br/>No audit trail records the agent's changes"]
+  S5 --> S6
+  B6_R8{{"R8 breaks"}} -.- S6
+  IMP(["Objective: Read other customers' case data and change case status and summaries without detection"])
+  S6 ==> IMP
+  classDef crit fill:#f8d7da,stroke:#b02a37,color:#58151c
+  classDef high fill:#fff3cd,stroke:#b8860b,color:#5c4400
+  classDef medi fill:#dbe9f6,stroke:#2b6cb0,color:#1a365d
+  classDef low fill:#e2e3e5,stroke:#6c757d,color:#343a40
+  classDef actor fill:#1f3864,stroke:#1f3864,color:#ffffff
+  classDef rec fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+  style IMP fill:#b02a37,stroke:#58151c,color:#ffffff
+  class A0 actor
+  class S1 high
+  class B1_R2 rec
+  class S2 crit
+  class B2_R2 rec
+  class S3 high
+  class B3_R1 rec
+  class S4 high
+  class B4_R1 rec
+  class S5 crit
+  class B5_R1 rec
+  class S6 medi
+  class B6_R8 rec
+```
+
+The L1-P5 CI/CD pipeline, the L2-P3.3 agent orchestrator and the other attack paths are in [`examples/example_dfd.mmd`](examples/example_dfd.mmd) and in the draw.io file. Open [`examples/example_threat_model.drawio`](examples/example_threat_model.drawio) in draw.io, [`examples/example_threatdragon.json`](examples/example_threatdragon.json) in Threat Dragon, and [`examples/example_threat_model_register.xlsx`](examples/example_threat_model_register.xlsx) in Excel to see the full outputs.
 
 Extract from the Threats sheet. Problem, solution and reference sit together:
 
@@ -202,15 +261,15 @@ Extract from the Threats sheet. Problem, solution and reference sit together:
 
 | Path | What it is |
 |---|---|
-| `agent/agent_instructions.txt` | Paste into the agent's Instructions field (~6,300 characters; the limit is 8,000) |
+| `agent/agent_instructions.txt` | Paste into the agent's Instructions field (~6,450 characters; the limit is 8,000) |
 | `agent/tm_generator.txt` | Generator to attach in chat if the agent can't find it in its knowledge files |
 | `agent/tm_loader.py` | The STEP 0 loader (also embedded in the instructions): finds the generator attached or in TM-03 |
 | `knowledge/TM-0*.docx` | The four knowledge files to upload to the agent |
 | `knowledge/src/*.md` | Editable source for the knowledge files (TM-03 and TM-04 are generated) |
 | `generator/tm_generator.py` | Validator and renderer: JSON model → Mermaid + multi-page `.drawio` + multi-sheet `.xlsx` + `.json` + Threat Dragon `.json`. Python standard library plus `openpyxl` only |
-| `examples/` | Example documents, model, Mermaid, draw.io and workbook |
+| `examples/` | Example documents, model, report, Mermaid, draw.io, PowerPoint deck, workbook, PNGs and Threat Dragon file |
 | `tools/build_knowledge.py` | Rebuilds TM-03, TM-04, the `.docx` files, the examples and `agent/tm_generator.txt` |
-| `tests/test_generator.py` | 21 tests: validation rules, drill-down links, threat visibility, workbook cross references, quotes, framework IDs, loader, Threat Dragon export |
+| `tests/test_generator.py` | 25 tests: validation rules, drill-down links, threat visibility, workbook cross references, quotes, framework IDs, loader, Threat Dragon export, attack paths, report, deck (native shapes) and embedded images |
 
 ### Knowledge files
 
@@ -256,9 +315,9 @@ To remove the attachment step completely, use full Copilot Studio and host `tm_g
 Code interpreter needs a **Microsoft 365 Copilot licence**, or Copilot Chat **without** metered usage. Without it, the agent still returns the diagrams, threats, improvements and questions in the chat, plus the JSON model. To get the files, save the JSON and run the generator yourself:
 
 ```bash
-pip install openpyxl
+pip install openpyxl matplotlib python-pptx pillow
 python generator/tm_generator.py model.json my_system
-# -> my_system.drawio, my_system_register.xlsx, my_system_model.json, my_system_threatdragon.json, Mermaid printed to stdout
+# -> .drawio, _register.xlsx, _deck.pptx, _diagrams_png.zip, _report.md, _model.json, _threatdragon.json
 ```
 
 ## Frameworks and versions (as of November 2026)
@@ -310,10 +369,17 @@ If you change the generator, the example model or the TM sources, run the build 
   - **Threat type:** threats are recorded as the STRIDE type, and the LINDDUN code and other framework IDs go in the description.
 - **Threagile** was considered and not added. Its YAML needs data that design documents rarely state: confidentiality, integrity and availability ratings, data assets and their classification, and technology types for every asset. It also generates its own risks from rules rather than importing threats. Exporting would mean inventing values.
 
+## Troubleshooting
+
+- **Mermaid diagrams or the report missing from the chat.** Earlier versions printed Mermaid blocks and left the agent to rebuild the report, so a long answer could get summarised or cut short. The generator now writes the whole report, all Mermaid included, to `<system>_report.md`, and prints it between `REPORT_START` and `REPORT_END`. The instructions tell the agent to paste it unchanged, across several replies if needed. If anything is still missing from the chat, open the `.md` file. It renders in VS Code, GitHub, Loop and Confluence.
+- **`SKIPPED PowerPoint deck` / `SKIPPED PNG images`** means Copilot's code interpreter is missing python-pptx, matplotlib or Pillow. Every other output is still produced. Run the generator locally on `_model.json` to get the missing files.
+- **Editing the deck.** Shapes, connectors and tables are native PowerPoint objects. Connectors are glued to shapes, so moving a shape drags its lines; flow labels are separate text boxes. Layout is automatic (one column per trust boundary), so expect to tidy busy diagrams by hand.
+
 ## Known limitations
 
 - **Page numbers depend on the file format.** Word files without visible page numbers produce section-only references.
 - **Microsoft doesn't document whether code interpreter can read knowledge files.** The loader tries, and the agent asks for `tm_generator.txt` if it can't.
+- **Diagrams can't be drawn as native Excel shapes**, because the Excel library has no shape support. The workbook embeds the PNGs instead; use the deck or draw.io for editable diagrams.
 - **The draw.io layout is simple:** one column per trust boundary, wrapping after four elements. Long cross-diagram flows may need tidying by hand.
 - **Very large document sets** may need several runs, one per subsystem. Reuse `_model.json` between runs so IDs carry over.
 - **For a fully predictable setup**, host `tm_generator.py` as an Azure Function and call it as an action from a full Copilot Studio agent.

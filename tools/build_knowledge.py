@@ -28,14 +28,27 @@ ix = g.index(model)
 g.drawio(model, str(EX / "example_threat_model.drawio"), ix)
 g.register(model, str(EX / "example_threat_model_register.xlsx"), ix)
 g.threatdragon(model, str(EX / "example_threatdragon.json"), ix)
+g.deck(model, str(EX / "example_deck.pptx"), ix)
+_imgs = []
+import os, tempfile, zipfile
+with tempfile.TemporaryDirectory() as _d:
+    _cwd = os.getcwd(); os.chdir(_d)
+    try:
+        _imgs = g.pngs(model, "example", ix)
+        with zipfile.ZipFile(EX / "example_diagrams_png.zip", "w", zipfile.ZIP_DEFLATED) as z:
+            for f in _imgs: z.write(f)
+        g.embed_images(str(EX / "example_threat_model_register.xlsx"), [os.path.join(_d, f) for f in _imgs], ix)
+    finally:
+        os.chdir(_cwd)
 order = sorted(model["diagrams"], key=lambda d: (d.get("level", 0), d["id"]))
 mers = {d["id"]: g.mermaid(model, d["id"], ix) for d in order}
+mers.update({a["id"]: g.mermaid_attack(model, a["id"], ix) for a in model.get("attack_paths", [])})
 (EX / "example_dfd.mmd").write_text("\n\n".join(f"%% {k}\n{v}" for k, v in mers.items()) + "\n", encoding="utf-8")
 
 # 2. TM-03
 (SRC / "TM-03_Generator_and_Schema.md").write_text(f"""---
 title: "TM-03 Generator Script and JSON Model Schema"
-subtitle: "Knowledge file for the Copilot DFD Threat Model agent - v2.0"
+subtitle: "Knowledge file for the Copilot DFD Threat Model agent - v2.3"
 ---
 
 # TM-03 What the generator does
@@ -46,11 +59,15 @@ tm_generator.py turns one JSON threat model (all levels) into outputs that alway
 - <system>_register.xlsx - one workbook for all levels: Read me, Threats (Problem, Solution and Document reference grouped together, with Refines / Refined by / Related / Arch. improvement / Open questions cross references as clickable links), Arch improvements, Open questions, Elements & flows, Diagrams, Documents.
 - <system>_model.json - the model, so the run can be repeated or updated later.
 - <system>_threatdragon.json - OWASP Threat Dragon v2 model: one Threat Dragon diagram per level, trust boundary boxes, actors/processes/stores/flows, and every threat on its element or flow with severity, STRIDE type, mitigation, score, and the T# ID, references and cross references in its title and description. Context elements are marked out of scope. Open it in Threat Dragon (web or desktop) with Open an existing threat model.
-- Mermaid text for each diagram, printed between "MERMAID_START <diagram>: <title>" and "MERMAID_END".
+- <system>_report.md - the full Markdown report: scope, decomposition map, every diagram as Mermaid with its threat table, threat and LINDDUN summary, attack paths (Mermaid + step tables), review, improvements, questions. It is also printed between REPORT_START and REPORT_END; the agent pastes it into the chat unchanged.
+- <system>_deck.pptx - PowerPoint deck built from native, editable shapes (needs python-pptx): executive summary, decomposition map, one DFD slide per diagram with glued connectors, threat tables, attack path chain slides, improvements, questions, legend. Action titles and a source line on every slide.
+- <system>_diagrams_png.zip - one PNG per DFD and per attack path (needs matplotlib); the same images are embedded in a "Diagram images" sheet of the workbook (needs Pillow).
+- draw.io and the workbook also include the attack paths: one draw.io page per path (each step links to the DFD page of its threat) and an "Attack paths" sheet; the Threats sheet has an "Attack paths" column.
+If an optional library is missing the generator prints "SKIPPED <output>: <reason>" and still produces everything else.
 
 It validates first and stops with MODEL INVALID on errors: duplicate IDs; broken references; child IDs not prefixed with the parent; a parent flow that is not in the parent diagram; threats whose target is not an own element or flow of their diagram; likelihood or impact outside 1-5; severity that does not match likelihood x impact; threats, improvements or questions without refs; refs to unknown documents; refines that does not point to a higher-level threat.
 
-It prints WARNING for: a Critical/High threat not addressed by any improvement; a Critical/High threat on a decomposed element not refined in the child; a gap threat without a question; a diagram over 20 elements; a child diagram with fewer than 3 own elements; an element without refs.
+It prints WARNING for: an attack path that no improvement breaks; Critical threats but no attack paths; a Critical/High threat not addressed by any improvement; a Critical/High threat on a decomposed element not refined in the child; a gap threat without a question; a diagram over 20 elements; a child diagram with fewer than 3 own elements; an element without refs.
 
 # TM-03 How the agent runs it
 
@@ -65,7 +82,7 @@ MODEL["diagrams"].append({{...L1-P3...}})
 ```
 
 3. run(MODEL, "<system_name>"). Fix every MODEL INVALID error and rerun. Fix each WARNING or explain it in the review.
-4. Provide the .drawio, .xlsx, _model.json and _threatdragon.json files for download and paste each Mermaid block unchanged.
+4. Paste the report between REPORT_START and REPORT_END into the chat unchanged (all Mermaid blocks included), then offer every file listed after FILES: for download.
 
 # TM-03 JSON model schema
 
@@ -73,6 +90,8 @@ MODEL["diagrams"].append({{...L1-P3...}})
 {{
   "title": "Threat model - <system name>",
   "documents": [ {{"id": "DOC1", "name": "file name", "version": "0.9", "date": "2026-10-02", "pages": 24}} ],
+  "summary": "3-5 sentence system summary", "frameworks_applied": "which frameworks and why",
+  "assumptions": ["..."], "review": ["coverage result", "cross-level pattern", "..."],
   "diagrams": [
     {{"id": "L0", "level": 0, "title": "System context", "refs": [...], "stop_reason": "what was decomposed and why / why not",
      "boundaries": [ {{"id": "TB1", "name": "Internet"}} ],
@@ -95,6 +114,11 @@ MODEL["diagrams"].append({{...L1-P3...}})
   ],
   "questions": [
     {{"id": "Q1", "question": "...", "threats": ["T9"], "refs": [...], "ask": "role who should answer"}}
+  ],
+  "attack_paths": [
+    {{"id": "AP1", "title": "...", "actor": "External attacker with a customer account", "entry": "E1",
+     "objective": "business impact at the end", "likelihood": 1-5, "impact": 1-5, "severity": "Critical|High|Medium|Low",
+     "steps": [ {{"threat": "T4", "action": "what the attacker does at this step"}}, {{"threat": "T14", "action": "..."}} ]}}
   ]
 }}
 ```
@@ -107,6 +131,7 @@ Field rules:
 - Element and flow IDs are unique across the model; boundary IDs are unique within a diagram.
 - A threat's target must be an own element or flow of its diagram.
 - refines points to a threat in a higher-level diagram; related lists any other threats. "Refined by", "Addressed by" (improvements) and "Open questions" are derived by the generator - do not add them to the model.
+- attack_paths: entry must be an own external entity (E#); at least two steps; each step's threat must exist (any level); severity must match likelihood x impact. "Broken by" per step is derived from the improvements that address the step's threat.
 - Boundaries are drawn left to right in the order listed: most untrusted first, build and admin planes last. More than four elements in a boundary wrap into extra columns.
 
 # TM-03 Script: tm_generator.py
@@ -115,109 +140,31 @@ Field rules:
 {script}```
 """, encoding="utf-8")
 
-# 3. TM-04
-def tree(gid, depth=0):
-    d = ix["diag"][gid]
-    line = f"{'    ' * depth}- {gid} {d['title']}" + (f" (decomposes {d['parent']})" if d.get("parent") else "") + \
-        f" [{g.ref_text(d.get('refs'))}]: {d.get('stop_reason', '')}"
-    kids = [c for c in order if c.get("parent") and ix["home"].get(c["parent"]) == gid]
-    return "\n".join([line] + [tree(c["id"], depth + 1) for c in kids])
-
-tb = g.tables(model, ix)
-tcols, trows = tb["Threats"]
-T = [dict(zip(tcols, r)) for r in trows]
-counts = "\n".join(f"| {d[0]} | {d[1]} | {d[6]} | {d[7]} | {d[8]} | {d[9]} |" for d in tb["Diagrams"][1])
-recs = "\n".join(f"| {r[0]} | {r[1]} | {r[2]} | {r[4]} | {r[7]} |" for r in tb["Arch improvements"][1])
-qs = "\n".join(f"| {r[0]} | {r[1]} | {r[2]} | {r[4]} |" for r in tb["Open questions"][1])
-docs = "\n".join(f"| {d['id']} | {d['name']} | {d['version']} | {d['pages']} |" for d in model["documents"])
-
-
-def threat_table(gid):
-    rows = [t for t in T if t["Diagram"] == gid]
-    return ("| ID | Severity | STRIDE | LINDDUN | Target | Problem | Solution | Ref | Refines |\n|---|---|---|---|---|---|---|---|---|\n" +
-            "\n".join(f"| {t['ID']} | {t['Severity']} | {t['STRIDE']} | {t['LINDDUN'] or '-'} | {t['Target']} | {t['Problem']} | "
-                      f"{t['Solution (control)']} | {t['Document reference']} | {t['Refines (parent threat)'] or '-'} |" for t in rows))
-
-
-diag_md = "\n\n".join(
-    f"### {d['id']} {d['title']}" + (f" - decomposes {d['parent']}" if d.get("parent") else "") +
-    f" [{g.ref_text(d.get('refs'))}]\n\n```mermaid\n{mers[d['id']]}\n```\n\n{threat_table(d['id'])}" for d in order)
-priv = []
-for code, name in g.LINDDUN.items():
-    ids = [t["ID"] for t in T if code in [c.strip() for c in t["LINDDUN"].split(",")]]
-    priv.append(f"| {code} {name} | {', '.join(ids) if ids else 'none found'} |")
-privacy = "| LINDDUN category | Threats |\n|---|---|\n" + "\n".join(priv)
+# 3. TM-04 - the example output is exactly what the generator's report produces (what the agent pastes into chat)
+report = re.sub(r"^(#+) ", r"#\1 ", g.report_md(model, ix), flags=re.M)
+report = report.split("\n", 2)[2]  # drop the report's own title line
 spec = (EX / "example_spec.md").read_text(encoding="utf-8").split("\n", 2)[2]
+(EX / "example_report.md").write_text(g.report_md(model, ix), encoding="utf-8")
 (SRC / "TM-04_Worked_Example.md").write_text(f"""---
 title: "TM-04 Worked Example (gold standard output)"
-subtitle: "Knowledge file for the Copilot DFD Threat Model agent - v2.0"
+subtitle: "Knowledge file for the Copilot DFD Threat Model agent - v2.3"
 ---
 
 # TM-04 How to use this example
 
-This is the target structure, depth and referencing for every answer. The system and documents are fictional. Reuse the structure, ID scheme, decomposition decisions, reference style and wording; do not copy its threats into other models unless the documents support them.
+This is the target structure, depth and referencing for every answer. The system and documents are fictional. Reuse the structure, ID scheme, decomposition decisions, attack path style, reference style and wording; do not copy its threats into other models unless the documents support them.
+
+The output section below is exactly the report that tm_generator.py prints between REPORT_START and REPORT_END (and saves as <system>_report.md). The agent pastes that report into the chat unchanged, including every Mermaid block, and then lists the downloadable files.
 
 # TM-04 Example input documents
 
 {spec}
-# TM-04 Example output
+# TM-04 Example output (the report)
 
-## 1. Scope
+{report}
+# TM-04 Example downloads
 
-| Doc | Document | Version | Pages |
-|---|---|---|---|
-{docs}
-
-System: customers upload documents through an Internet-facing gateway; an AI agent summarises them using a third-party hosted LLM, a vector index and two database tools, and staff approve summaries in a review portal. Build and deployment use GitHub Actions on shared self-hosted runners to AKS.
-
-Frameworks applied: STRIDE per element (always); LINDDUN (customer personal data); OWASP Top 10:2025 (web services); API Security 2023 (gateway APIs); LLM 2026 and Agentic 2026 (summariser agent, tools, memory, vector index); CI/CD Top 10 (DOC2 pipeline).
-
-Assumptions: F10 Review Portal to Case DB connection is not described in DOC1 and is modelled as assumed.
-
-## 2. Decomposition map
-
-{tree("L0")}
-
-## 3. Diagrams and threats (L0 first, then each decomposition)
-
-{diag_md}
-
-## 4. Legend
-
-Rectangle = external entity, circle = process, double circle ⊞ = decomposed (see child diagram), cylinder = data store, grey dashed = context from another level, red dashed box = trust boundary, dashed line = assumed, hexagon = Critical/High threat, ⚠T# on an arrow = threat on that flow.
-
-## 5. Threat summary
-
-| Diagram | Level | Critical | High | Medium | Low |
-|---|---|---|---|---|---|
-{counts}
-
-Privacy (LINDDUN) - personal data is in customer documents, prompts, the vector index and agent memory:
-
-{privacy}
-
-## 6. Review findings
-
-- Coverage: every Critical/High threat on a decomposed element is refined in its child (T2 by T14 and T15; T7 by T21 and T24; T15 by T26-T28). All Critical and High threats are addressed by an improvement. All gap threats (T9, T10, T13) have questions. Generator warnings: none.
-- Cross-level pattern 1 - untrusted content reaches privileged components: crafted uploads (T4) reach parsers that share a container with the orchestrator (T16), are mixed into the prompt (T14) and can drive write tools (T26). One structural change (R1 + R2) addresses the chain.
-- Cross-level pattern 2 - static, over-privileged credentials: the cluster-admin kubeconfig (T3, T22), the registry secret (T25) and the LLM API key (T18) are all long-lived secrets. R3 and R6 move to workload identity.
-- Cross-level pattern 3 - shared stores without tenant partitioning: blob paths (T6), vector index (T8, T17), search tool (T28) and agent memory (T29). R5 applies one tenant-isolation model across them.
-
-## 7. Architecture improvements
-
-| ID | Priority | Improvement | Addresses | Ref |
-|---|---|---|---|---|
-{recs}
-
-## 8. Open questions
-
-| ID | Question | Ref | Threats |
-|---|---|---|---|
-{qs}
-
-## 9. Downloads
-
-example_threat_model.drawio (four pages with drill-down), example_threat_model_register.xlsx (all levels, cross-referenced) and the model JSON, produced by tm_generator.py.
+example.drawio (4 DFD pages + 3 attack path pages), example_deck.pptx (editable deck), example_register.xlsx (all levels, attack paths, embedded images), example_diagrams_png.zip, example_report.md, example_model.json, example_threatdragon.json.
 
 # TM-04 Example JSON model (input to tm_generator.py)
 

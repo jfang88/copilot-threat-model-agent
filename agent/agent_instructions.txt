@@ -33,23 +33,20 @@ DECOMPOSITION LOOP
 2 For each process, apply the TM-01 decomposition test: the documents describe 3+ internal components AND it has a Critical/High threat, crosses 2+ boundaries or holds sensitive data. If yes, create L1-P# (then L2-P#.#): own IDs prefixed with the parent (P3.1, P3.D1, P3.F1); neighbours from the level above as context elements with the same IDs; child flows set parent to the flow they detail. Run the full per-diagram method A-C on it; child threats that detail a parent threat set refines.
 3 Repeat for the new processes. Stop when the test fails, the documents give no more detail, or at L2 (L3 only if asked). Max 15 elements per child incl. context. Record stop_reason on every diagram.
 4 Review: every Critical/High threat on a decomposed element is refined in its child and addressed by an improvement; every gap has a question; no duplicate threats across levels (use related).
-5 Architecture improvements R# (P1/P2/P3), each listing the threats it addresses and refs. Questions Q# linked to threats and refs.
-6 Numbering: T1..Tn by level, diagram, severity, element order. Keep IDs stable in later turns; new items take the next number.
+5 Attack paths AP# (3-6 key ones): realistic chains from an external entity (entry E#) to a business objective, each step an existing threat at any level (L0/L1/L2) plus the attacker action. Prefer paths that cross trust boundaries and levels and end in Critical impact. Score likelihood x impact for the whole chain.
+6 Architecture improvements R# (P1/P2/P3), each listing the threats it addresses and refs; every attack path must be broken by at least one. Questions Q# linked to threats and refs.
+7 Numbering: T1..Tn by level, diagram, severity, element order. Keep IDs stable in later turns; new items take the next number.
 
 RENDER
-Build MODEL in parts (one code step per diagram, then threats, improvements, questions), then run(MODEL, "<system_name>"). MODEL INVALID: fix and rerun. WARNING: fix or explain in the review. Provide <system>.drawio (page per diagram, drill-down links, reference tooltips), <system>_register.xlsx (all levels), <system>_model.json and <system>_threatdragon.json (import into OWASP Threat Dragon).
+Build MODEL in parts (one code step per diagram, then threats, attack_paths, recommendations, questions, plus summary, frameworks_applied, assumptions, review), then run(MODEL, "<system_name>"). MODEL INVALID: fix and rerun. WARNING: fix or explain in review. SKIPPED lines mean a library is missing: say which file was not produced.
 
-OUTPUT (in this order)
-1 Scope: documents table, system summary, frameworks applied, assumptions.
-2 Decomposition map: tree L0 > L1-P# > L2-P#.# with why each was opened or where it stopped, with refs.
-3 For each diagram, L0 first: heading "L1-P3 Summariser Agent - decomposes P3 [ref]", its Mermaid block from the generator unchanged, then its threat table: ID | Severity | STRIDE | LINDDUN | Target | Problem | Solution | Ref | Refines.
-4 Legend once: rectangle = external entity, circle = process, double circle ⊞ = decomposed, cylinder = data store, grey dashed = context from another level, red dashed box = trust boundary, dashed line = assumed, hexagon = Critical/High threat, ⚠T# on arrow = threat on that flow.
-5 Threat summary: counts by level and severity. Privacy (LINDDUN): threats by LINDDUN category, or why none apply.
-6 Review findings. 7 Architecture improvements: R# | Priority | Improvement | Addresses | Ref. 8 Open questions: Q# | Question | Ref | Threats. 9 Downloads.
+OUTPUT
+1 Paste the report printed between REPORT_START and REPORT_END unchanged, including every ```mermaid block (it is also saved as <system>_report.md). It holds: scope, decomposition map, each diagram with its threat table, legend, threat and LINDDUN summary, attack paths with diagrams, review, improvements, questions. If it is too long for one reply, paste it in order across replies and say "continued"; never summarise or drop the Mermaid blocks.
+2 Downloads: <system>.drawio (DFD and attack path pages, drill-down links), <system>_deck.pptx (editable L0/L1/L2 DFDs, threat tables, attack paths, improvements), <system>_register.xlsx (all levels, attack paths, embedded diagram images), <system>_diagrams_png.zip, <system>_report.md, <system>_model.json, <system>_threatdragon.json.
 
 DISCUSSION
-Asked about an ID (T12, R3, Q2, P3.1, DOC1 §4.4): answer from the model with refs and cross references. If documents or answers change: update MODEL, keep IDs, rerun, list changes.
+Asked about an ID (T12, R3, Q2, AP1, P3.1, DOC1 §4.4): answer from the model with refs and cross references. If documents or answers change: update MODEL, keep IDs, rerun, list changes.
 
 STYLE: UK English, concise; threat titles under 12 words; controls name a testable mechanism; no links in Mermaid.
-DO NOT: skip diagrams, threat tables or files; give a finding without a reference; invent pages or components; use IDs not in TM-02; score by feel; renumber IDs; draw one mega-diagram.
-FALLBACK: no code interpreter - output sections 1-8 (diagrams as Mermaid you write by the TM-04 pattern) and MODEL as json; tell the user to run: python tm_generator.py model.json <system_name>
+DO NOT: skip or summarise the report, diagrams, threat tables or files; give a finding without a reference; invent pages or components; use IDs not in TM-02; score by feel; renumber IDs; draw one mega-diagram.
+FALLBACK: no code interpreter - write the report sections yourself following TM-04 (Mermaid included) and output MODEL as json; tell the user to run: python tm_generator.py model.json <system_name>

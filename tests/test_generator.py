@@ -80,7 +80,7 @@ def test_drawio_has_a_page_per_diagram_with_drilldown_links():
         g.drawio(MODEL, str(p))
         doc = xml.dom.minidom.parse(str(p))
     pages = {x.getAttribute("id") for x in doc.getElementsByTagName("diagram")}
-    assert pages == {x["id"] for x in MODEL["diagrams"]}
+    assert pages == {x["id"] for x in MODEL["diagrams"]} | {a["id"] for a in MODEL["attack_paths"]}
     links = {u.getAttribute("id"): u.getAttribute("link") for u in doc.getElementsByTagName("UserObject")}
     assert links["L0|P3"] == "data:page/id,L1-P3"          # decomposed process opens its child
     assert links["L1-P3|P3.3"] == "data:page/id,L2-P3.3"
@@ -229,6 +229,67 @@ def test_threatdragon_export_matches_model():
                     assert t[k], k
                 exported[t["title"].split(":")[0]] = (dg["title"].split(":")[0], c["data"]["name"].split(":")[0])
     assert {t["id"]: (t["diagram"], t["target"]) for t in MODEL["threats"]} == exported
+
+
+def test_attack_path_validation():
+    m = copy.deepcopy(MODEL)
+    m["attack_paths"][0]["entry"] = "P2"
+    m["attack_paths"][1]["severity"] = "Low"
+    m["attack_paths"][2]["steps"][0]["threat"] = "T99"
+    e = errors(m)
+    assert "AP1: entry P2 must be an external entity" in e
+    assert "AP2: severity should be High" in e
+    assert "AP3: step threat T99 unknown" in e
+
+
+def test_report_contains_every_mermaid_diagram_and_section():
+    rep = g.report_md(MODEL)
+    assert rep.count("```mermaid") == len(MODEL["diagrams"]) + len(MODEL["attack_paths"])
+    for h in ("## 1. Scope", "## 2. Decomposition map", "## 3. Diagrams and threats", "## 4. Threat summary",
+              "## 5. Attack paths", "## 6. Review findings", "## 7. Architecture improvements", "## 8. Open questions"):
+        assert h in rep, h
+    for t in MODEL["threats"]:
+        assert f"| {t['id']} |" in rep, t["id"]
+    assert "AP1" in rep and "R1" in rep and "Q1" in rep
+
+
+def test_attack_path_outputs():
+    ix = g.index(MODEL)
+    mer = g.mermaid_attack(MODEL, "AP1", ix)
+    for st in MODEL["attack_paths"][0]["steps"]:
+        assert st["threat"] in mer
+    assert "R1 breaks" in mer
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "t.drawio"
+        g.drawio(MODEL, str(p))
+        doc = xml.dom.minidom.parse(str(p))
+    pages = [x.getAttribute("id") for x in doc.getElementsByTagName("diagram")]
+    assert pages[-3:] == ["AP1", "AP2", "AP3"]
+    links = {u.getAttribute("id"): u.getAttribute("link") for u in doc.getElementsByTagName("UserObject")}
+    assert links["AP1|s2"] == "data:page/id,L1-P3"            # step 2 (T14) opens the L1-P3 DFD page
+    cols, rows = g.tables(MODEL, ix)["Attack paths"]
+    assert any(r[0] == "AP3" and r[4] == "T22" and "R3" in r[8] for r in rows)
+
+
+def test_deck_is_native_shapes_and_images_embed():
+    import os
+    from pptx import Presentation
+    from openpyxl import load_workbook
+    with tempfile.TemporaryDirectory() as d:
+        g.deck(MODEL, str(Path(d) / "deck.pptx"))
+        prs = Presentation(str(Path(d) / "deck.pptx"))
+        kinds = [sh.shape_type for sl in prs.slides for sh in sl.shapes]
+        assert len(prs.slides) >= len(MODEL["diagrams"]) * 2 + len(MODEL["attack_paths"]) + 4
+        assert 13 not in kinds                                     # 13 = PICTURE: everything is editable shapes
+        cwd = os.getcwd(); os.chdir(d)
+        try:
+            imgs = g.pngs(MODEL, "x")
+            g.register(MODEL, "r.xlsx")
+            g.embed_images("r.xlsx", imgs, g.index(MODEL))
+            assert len(imgs) == len(MODEL["diagrams"]) + len(MODEL["attack_paths"])
+            assert len(load_workbook("r.xlsx")["Diagram images"]._images) == len(imgs)
+        finally:
+            os.chdir(cwd)
 
 
 if __name__ == "__main__":

@@ -191,3 +191,115 @@ flowchart LR
   class P3_D1 ctx
   class D2 ctx
   class E3 ctx
+
+%% AP1
+flowchart LR
+  A0["Attacker: External attacker with a customer account<br/>entry E1"]
+  S1["1. T4 High - P2: Intake Service<br/>Upload a PDF with hidden instructions; any file type is accepted"]
+  A0 --> S1
+  B1_R2{{"R2 breaks"}} -.- S1
+  S2["2. T14 Critical - P3.2: Prompt Builder<br/>Hidden text is concatenated into the prompt and read as instructions"]
+  S1 --> S2
+  B2_R2{{"R2 breaks"}} -.- S2
+  S3["3. T27 High - P3.3.2: Tool router<br/>Model requests tool calls that the router executes without validation"]
+  S2 --> S3
+  B3_R1{{"R1 breaks"}} -.- S3
+  S4["4. T28 High - P3.3.3: search_cases tool<br/>search_cases returns other customers' cases into the summary"]
+  S3 --> S4
+  B4_R1{{"R1 breaks"}} -.- S4
+  S5["5. T26 Critical - P3.3.4: update_case tool<br/>update_case changes case status and summary with service credentials"]
+  S4 --> S5
+  B5_R1{{"R1 breaks"}} -.- S5
+  S6["6. T10 Medium - D2: Case DB (SQL)<br/>No audit trail records the agent's changes"]
+  S5 --> S6
+  B6_R8{{"R8 breaks"}} -.- S6
+  IMP(["Objective: Read other customers' case data and change case status and summaries without detection"])
+  S6 ==> IMP
+  classDef crit fill:#f8d7da,stroke:#b02a37,color:#58151c
+  classDef high fill:#fff3cd,stroke:#b8860b,color:#5c4400
+  classDef medi fill:#dbe9f6,stroke:#2b6cb0,color:#1a365d
+  classDef low fill:#e2e3e5,stroke:#6c757d,color:#343a40
+  classDef actor fill:#1f3864,stroke:#1f3864,color:#ffffff
+  classDef rec fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+  style IMP fill:#b02a37,stroke:#58151c,color:#ffffff
+  class A0 actor
+  class S1 high
+  class B1_R2 rec
+  class S2 crit
+  class B2_R2 rec
+  class S3 high
+  class B3_R1 rec
+  class S4 high
+  class B4_R1 rec
+  class S5 crit
+  class B5_R1 rec
+  class S6 medi
+  class B6_R8 rec
+
+%% AP2
+flowchart LR
+  A0["Attacker: External attacker with a customer account<br/>entry E1"]
+  S1["1. T4 High - P2: Intake Service<br/>Upload a malformed image that exploits the OCR library"]
+  A0 --> S1
+  B1_R2{{"R2 breaks"}} -.- S1
+  S2["2. T16 High - P3.1: Text Extractor<br/>Exploit runs in the container shared with the orchestrator"]
+  S1 --> S2
+  B2_R2{{"R2 breaks"}} -.- S2
+  S3["3. T18 High - P3.F6: Prompt + doc text, API key from env var<br/>Read the LLM API key from the environment and reuse it externally"]
+  S2 --> S3
+  B3_R6{{"R6 breaks"}} -.- S3
+  S4["4. T20 Medium - P3.D1: Conversation cache (Redis)<br/>Read 7 days of cached prompts and outputs from Redis"]
+  S3 --> S4
+  B4_R5{{"R5 breaks"}} -.- S4
+  IMP(["Objective: Run code in the summariser pod, steal the LLM API key and read cached prompts containing personal data"])
+  S4 ==> IMP
+  classDef crit fill:#f8d7da,stroke:#b02a37,color:#58151c
+  classDef high fill:#fff3cd,stroke:#b8860b,color:#5c4400
+  classDef medi fill:#dbe9f6,stroke:#2b6cb0,color:#1a365d
+  classDef low fill:#e2e3e5,stroke:#6c757d,color:#343a40
+  classDef actor fill:#1f3864,stroke:#1f3864,color:#ffffff
+  classDef rec fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+  style IMP fill:#b02a37,stroke:#58151c,color:#ffffff
+  class A0 actor
+  class S1 high
+  class B1_R2 rec
+  class S2 high
+  class B2_R2 rec
+  class S3 high
+  class B3_R6 rec
+  class S4 medi
+  class B4_R5 rec
+
+%% AP3
+flowchart LR
+  A0["Attacker: Outside contributor or compromised developer account<br/>entry E4"]
+  S1["1. T21 Critical - P5.F4: Secrets exposed to PR jobs<br/>Open a PR whose workflow runs on the shared runner with secrets"]
+  A0 --> S1
+  B1_R3{{"R3 breaks"}} -.- S1
+  S2["2. T22 Critical - P5.F7: Cluster-admin kubeconfig<br/>Exfiltrate the cluster-admin kubeconfig from repository secrets"]
+  S1 --> S2
+  B2_R3{{"R3 breaks"}} -.- S2
+  S3["3. T23 High - P5.3: Deploy job<br/>Push a backdoored image; deploy does not verify signatures"]
+  S2 --> S3
+  B3_R4{{"R4 breaks"}} -.- S3
+  S4["4. T3 Critical - F12: Deploy images, cluster-admin kubeconfig<br/>Use cluster-admin to deploy to and read from every namespace"]
+  S3 --> S4
+  B4_R3{{"R3 breaks"}} -.- S4
+  IMP(["Objective: Full control of production AKS, including every customer's documents and cases"])
+  S4 ==> IMP
+  classDef crit fill:#f8d7da,stroke:#b02a37,color:#58151c
+  classDef high fill:#fff3cd,stroke:#b8860b,color:#5c4400
+  classDef medi fill:#dbe9f6,stroke:#2b6cb0,color:#1a365d
+  classDef low fill:#e2e3e5,stroke:#6c757d,color:#343a40
+  classDef actor fill:#1f3864,stroke:#1f3864,color:#ffffff
+  classDef rec fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+  style IMP fill:#b02a37,stroke:#58151c,color:#ffffff
+  class A0 actor
+  class S1 crit
+  class B1_R3 rec
+  class S2 crit
+  class B2_R3 rec
+  class S3 high
+  class B3_R4 rec
+  class S4 crit
+  class B4_R3 rec

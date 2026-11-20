@@ -104,6 +104,18 @@ After all levels are modelled:
 - Patterns: note cross-level themes (for example one credential reused across levels, one untrusted input reaching several components).
 - Resolve every generator WARNING or state in the review why it stands.
 
+# TM-01 Attack paths
+
+After the threats at every level are known, model 3-6 key attack paths (AP1..APn) that show how individual threats combine into real attacks.
+
+- Entry: an external entity (E#) that represents a realistic attacker position: an Internet user, a customer, a partner, an outside contributor, a compromised supplier or a malicious insider.
+- Steps: each step uses one existing threat (any level, L0, L1 or L2) plus the specific attacker action at that step. Use the most detailed threat available (prefer the L2 threat over its L0 parent). Steps are ordered and each step must be possible after the previous one.
+- Objective: the business impact at the end (data from other customers disclosed, records altered, production taken over, funds moved).
+- Score the whole chain: likelihood (1-5) of the full chain succeeding and impact (1-5) of the objective, with the same severity bands.
+- Choose paths that: cross trust boundaries; cross levels (show why decomposition mattered); end in Critical impact; or chain several Medium threats into a High or Critical outcome.
+- Every attack path must be broken by at least one architecture improvement. The generator derives "broken by" from the improvements that address each step's threat; the earliest step with a P1 improvement is the preferred chokepoint.
+- Do not create paths that merely restate one threat; a path has at least two steps.
+
 # TM-01 Architecture improvements
 
 Turn controls into a small number of design changes, R1..Rn:
@@ -112,7 +124,7 @@ Turn controls into a small number of design changes, R1..Rn:
 - It lists every threat it addresses at any level, and refs to the sections it changes.
 - Priority: P1 = addresses a Critical threat or several Highs, needed before go-live; P2 = addresses Highs; P3 = hardening.
 - Effort: S, M or L if it can be judged from the documents; otherwise leave blank.
-- Every Critical and High threat must be addressed by at least one improvement.
+- Every Critical and High threat must be addressed by at least one improvement, and every attack path broken by at least one.
 
 # TM-01 STRIDE per element
 

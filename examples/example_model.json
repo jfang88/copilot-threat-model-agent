@@ -2126,5 +2126,111 @@
    ],
    "ask": "Platform team"
   }
+ ],
+ "summary": "Customers upload documents through an Internet-facing gateway; an AI agent summarises them using a third-party hosted LLM, a vector index and two database tools, and staff approve summaries in a review portal. Build and deployment use GitHub Actions on shared self-hosted runners to AKS.",
+ "frameworks_applied": "STRIDE per element (always); LINDDUN (customer personal data in documents, prompts, index and agent memory); OWASP Top 10:2025 (web services); API Security 2023 (gateway APIs); LLM 2026 and Agentic 2026 (summariser agent, tools, memory, vector index); CI/CD Top 10 (DOC2 pipeline).",
+ "assumptions": [
+  "F10 Review Portal to Case DB connection is not described in DOC1 and is modelled as assumed.",
+  "The Service Bus queue between Intake and Summariser is modelled as flow F4."
+ ],
+ "review": [
+  "Coverage: every Critical/High threat on a decomposed element is refined in its child (T2 by T14 and T15; T7 by T21 and T24; T15 by T26-T28). All Critical and High threats are addressed by an improvement. All gap threats (T9, T10, T13) have questions.",
+  "Pattern - untrusted content reaches privileged components: crafted uploads (T4) reach parsers sharing a container with the orchestrator (T16), are mixed into the prompt (T14) and can drive write tools (T26). R1 + R2 break the chain (AP1, AP2).",
+  "Pattern - static, over-privileged credentials: cluster-admin kubeconfig (T3, T22), registry secret (T25) and LLM API key (T18). R3 and R6 move to workload identity (AP2, AP3).",
+  "Pattern - shared stores without tenant partitioning: blob paths (T6), vector index (T8, T17), search tool (T28) and agent memory (T29). R5 applies one tenant-isolation model."
+ ],
+ "attack_paths": [
+  {
+   "id": "AP1",
+   "title": "Poisoned upload hijacks the agent to read and alter other customers' cases",
+   "actor": "External attacker with a customer account",
+   "entry": "E1",
+   "objective": "Read other customers' case data and change case status and summaries without detection",
+   "likelihood": 4,
+   "impact": 5,
+   "severity": "Critical",
+   "steps": [
+    {
+     "threat": "T4",
+     "action": "Upload a PDF with hidden instructions; any file type is accepted"
+    },
+    {
+     "threat": "T14",
+     "action": "Hidden text is concatenated into the prompt and read as instructions"
+    },
+    {
+     "threat": "T27",
+     "action": "Model requests tool calls that the router executes without validation"
+    },
+    {
+     "threat": "T28",
+     "action": "search_cases returns other customers' cases into the summary"
+    },
+    {
+     "threat": "T26",
+     "action": "update_case changes case status and summary with service credentials"
+    },
+    {
+     "threat": "T10",
+     "action": "No audit trail records the agent's changes"
+    }
+   ]
+  },
+  {
+   "id": "AP2",
+   "title": "Parser exploit steals the LLM API key and cached customer data",
+   "actor": "External attacker with a customer account",
+   "entry": "E1",
+   "objective": "Run code in the summariser pod, steal the LLM API key and read cached prompts containing personal data",
+   "likelihood": 3,
+   "impact": 5,
+   "severity": "High",
+   "steps": [
+    {
+     "threat": "T4",
+     "action": "Upload a malformed image that exploits the OCR library"
+    },
+    {
+     "threat": "T16",
+     "action": "Exploit runs in the container shared with the orchestrator"
+    },
+    {
+     "threat": "T18",
+     "action": "Read the LLM API key from the environment and reuse it externally"
+    },
+    {
+     "threat": "T20",
+     "action": "Read 7 days of cached prompts and outputs from Redis"
+    }
+   ]
+  },
+  {
+   "id": "AP3",
+   "title": "Malicious pull request takes over the production cluster",
+   "actor": "Outside contributor or compromised developer account",
+   "entry": "E4",
+   "objective": "Full control of production AKS, including every customer's documents and cases",
+   "likelihood": 4,
+   "impact": 5,
+   "severity": "Critical",
+   "steps": [
+    {
+     "threat": "T21",
+     "action": "Open a PR whose workflow runs on the shared runner with secrets"
+    },
+    {
+     "threat": "T22",
+     "action": "Exfiltrate the cluster-admin kubeconfig from repository secrets"
+    },
+    {
+     "threat": "T23",
+     "action": "Push a backdoored image; deploy does not verify signatures"
+    },
+    {
+     "threat": "T3",
+     "action": "Use cluster-admin to deploy to and read from every namespace"
+    }
+   ]
+  }
  ]
 }
